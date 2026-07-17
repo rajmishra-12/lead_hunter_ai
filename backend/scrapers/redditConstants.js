@@ -1,6 +1,26 @@
 export const SUBREDDITS = [
   'AppDevelopers',
-  'WebDeveloperJobs'
+  'WebDeveloperJobs',
+  'forhire',
+  'freelance',
+  'Freelancers',
+  'slavelabour',
+  'Hiring',
+  'jobbit',
+  'WorkOnline',
+  'DoneDirtCheap',
+  'startups',
+  'SideProject',
+  'EntrepreneurRideAlong',
+  'cofounder',
+  'SaaS',
+  'Entrepreneur',
+  'NoCode',
+  'indiehackers',
+  'FlutterDev',
+  'ReactNative',
+  'androiddev',
+  'webdev'
 ];
 
 export const KEYWORDS = [
