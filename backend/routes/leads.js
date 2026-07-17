@@ -8,12 +8,14 @@ import {
   triggerScraping, 
   getSavedLeads,
   exportCSV,
-  exportJSON
+  exportJSON,
+  clearLeads
 } from '../controllers/leadsController.js';
 
 const router = express.Router();
 
 router.get('/', getLeads);
+router.delete('/', clearLeads);
 router.post('/scrape', triggerScraping);
 router.get('/saved', getSavedLeads);
 router.post('/save', saveLead);

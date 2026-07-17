@@ -254,3 +254,16 @@ export const exportJSON = (req, res) => {
     res.status(500).json({ success: false, message: 'Export failed' });
   }
 };
+
+// DELETE ALL LEADS
+export const clearLeads = (req, res) => {
+  try {
+    db.prepare('DELETE FROM leads').run();
+    db.prepare('DELETE FROM saved').run();
+    logger.info('All leads cleared from the database.');
+    res.json({ success: true, message: 'All leads successfully deleted.' });
+  } catch (err) {
+    logger.error(`Error in clearLeads: ${err.message}`);
+    res.status(500).json({ success: false, message: 'Failed to delete leads' });
+  }
+};

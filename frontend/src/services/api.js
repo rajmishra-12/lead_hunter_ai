@@ -45,6 +45,11 @@ export const leadsService = {
     return response.data;
   },
 
+  clearLeads: async () => {
+    const response = await api.delete('/leads');
+    return response.data;
+  },
+
   getExportCsvUrl: () => `${API_BASE_URL}/leads/export/csv`,
   getExportJsonUrl: () => `${API_BASE_URL}/leads/export/json`
 };
