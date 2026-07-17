@@ -46,6 +46,16 @@ export async function scrapeReddit() {
           const titleLower = post.title.toLowerCase();
           const bodyLower = post.body.toLowerCase();
           
+          // Skip posts made by other freelancers (for hire, offer, services, portfolio, hire me)
+          const isForHire = titleLower.includes('[for hire]') || 
+                            titleLower.includes('for hire') || 
+                            titleLower.includes('[offer]') || 
+                            titleLower.includes('[portfolio]') || 
+                            titleLower.includes('[services]') ||
+                            titleLower.startsWith('for hire') ||
+                            titleLower.includes('hire me');
+          if (isForHire) continue;
+          
           // Match against the comprehensive keywords list
           const matchesKeyword = KEYWORDS.some(kw => titleLower.includes(kw) || bodyLower.includes(kw));
           if (!matchesKeyword) continue;
