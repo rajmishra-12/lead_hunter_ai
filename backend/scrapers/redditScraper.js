@@ -13,30 +13,44 @@ const REDDIT_MIRRORS = [
 ];
 
 export async function scrapeReddit() {
-  logger.scraper('reddit', `Starting Reddit scrape of ${SUBREDDITS.length} subreddits via mirror rotation...`);
+  logger.scraper('reddit', `Starting Reddit scrape of ${SUBREDDITS.length} subreddits via load-balanced mirror rotation...`);
   const leads = [];
   
-  // Helper to scrape a single subreddit with mirror fallback rotation
-  const scrapeSubreddit = async (subreddit) => {
+  // Track starting mirror index to distribute load evenly
+  let mirrorIndex = 0;
+
+  for (let i = 0; i < SUBREDDITS.length; i++) {
+    const subreddit = SUBREDDITS[i];
     let postsData = [];
     
-    for (const mirror of REDDIT_MIRRORS) {
+    // Rotate the starting mirror for each request
+    const currentMirrorSequence = [
+      ...REDDIT_MIRRORS.slice(mirrorIndex),
+      ...REDDIT_MIRRORS.slice(0, mirrorIndex)
+    ];
+    mirrorIndex = (mirrorIndex + 1) % REDDIT_MIRRORS.length;
+
+    let mirrorsTried = 0;
+    for (const mirror of currentMirrorSequence) {
+      if (mirrorsTried >= 2) break;
+      mirrorsTried++;
       try {
         const url = `${mirror}/r/${subreddit}/new`;
         
         const response = await axios.get(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
-            'Accept-Language': 'en-US,en;q=0.9'
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
           },
-          timeout: 10000
+          timeout: 3000
         });
 
         const $ = cheerio.load(response.data);
         const posts = $('.post');
         
         if (posts.length > 0) {
-          logger.scraper('reddit', `Successfully crawled r/${subreddit} using ${mirror}. Found ${posts.length} posts.`);
+          logger.scraper('reddit', `[${i + 1}/${SUBREDDITS.length}] Crawled r/${subreddit} successfully using ${mirror}. Found ${posts.length} posts.`);
           
           posts.each((_, element) => {
             const $post = $(element);
@@ -58,64 +72,53 @@ export async function scrapeReddit() {
             postsData.push({ id, title, permalink, author, body, created_time, subreddit });
           });
           
-          break; // Successfully got posts, exit mirror fallback loop
+          break; // Successfully got posts, exit mirror sequence loop
         }
       } catch (err) {
-        // Silent catch, try next mirror
+        // Silent catch, try next mirror in sequence
       }
     }
-    
+
     if (postsData.length === 0) {
-      logger.scraper('reddit', `All mirrors returned 0 posts or failed for r/${subreddit}`);
+      logger.scraper('reddit', `[${i + 1}/${SUBREDDITS.length}] All mirrors failed or returned 0 posts for r/${subreddit}`);
+    } else {
+      // Process extracted posts matching against keywords list
+      for (const post of postsData) {
+        const titleLower = post.title.toLowerCase();
+        const bodyLower = post.body.toLowerCase();
+        
+        const matchesKeyword = KEYWORDS.some(kw => titleLower.includes(kw) || bodyLower.includes(kw));
+        if (!matchesKeyword) continue;
+
+        const leadId = `reddit_${post.id}`;
+        const analysis = analyzeLead(post.title, post.body);
+
+        leads.push({
+          id: leadId,
+          title: post.title,
+          description: post.body,
+          url: `https://www.reddit.com${post.permalink}`,
+          author: post.author || 'anonymous',
+          created_time: post.created_time,
+          estimated_budget: analysis.estimatedBudget,
+          technology: analysis.technology,
+          platform: analysis.platform,
+          location: 'Remote',
+          company: 'Reddit Client',
+          source: `reddit/r/${post.subreddit}`,
+          score: analysis.score,
+          ai_summary: analysis.summary,
+          ai_risks: analysis.risks,
+          ai_estimated_hours: analysis.estimatedHours,
+          ai_suggested_tech: analysis.suggestedTech,
+          status: 'New'
+        });
+      }
     }
-    
-    return postsData;
-  };
 
-  // Run in chunks of 5 parallel requests to avoid overwhelming the mirrors or local stack
-  const chunkSize = 5;
-  for (let i = 0; i < SUBREDDITS.length; i += chunkSize) {
-    const chunk = SUBREDDITS.slice(i, i + chunkSize);
-    logger.scraper('reddit', `Scraping batch ${Math.floor(i / chunkSize) + 1}/${Math.ceil(SUBREDDITS.length / chunkSize)}...`);
-    
-    const results = await Promise.all(chunk.map(sub => scrapeSubreddit(sub)));
-    const allBatchPosts = results.flat();
-    
-    for (const post of allBatchPosts) {
-      const titleLower = post.title.toLowerCase();
-      const bodyLower = post.body.toLowerCase();
-      
-      // Match against the comprehensive keywords list
-      const matchesKeyword = KEYWORDS.some(kw => titleLower.includes(kw) || bodyLower.includes(kw));
-      if (!matchesKeyword) continue;
-
-      const leadId = `reddit_${post.id}`;
-      const analysis = analyzeLead(post.title, post.body);
-
-      leads.push({
-        id: leadId,
-        title: post.title,
-        description: post.body,
-        url: `https://www.reddit.com${post.permalink}`,
-        author: post.author || 'anonymous',
-        created_time: post.created_time,
-        estimated_budget: analysis.estimatedBudget,
-        technology: analysis.technology,
-        platform: analysis.platform,
-        location: 'Remote',
-        company: 'Reddit Client',
-        source: `reddit/r/${post.subreddit}`,
-        score: analysis.score,
-        ai_summary: analysis.summary,
-        ai_risks: analysis.risks,
-        ai_estimated_hours: analysis.estimatedHours,
-        ai_suggested_tech: analysis.suggestedTech,
-        status: 'New'
-      });
-    }
-    
-    // Quick cooling delay between batches to respect mirrors
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // A small human-like delay (800ms - 1500ms) between sequential subreddits to prevent mirror rate limits
+    const delay = 800 + Math.floor(Math.random() * 700);
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
 
   logger.scraper('reddit', `Completed Reddit scraping. Extracted ${leads.length} mobile/hiring leads.`);
