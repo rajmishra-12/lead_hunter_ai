@@ -119,6 +119,36 @@ export const getAnalytics = (req, res) => {
       LIMIT 10
     `).all();
 
+    // 7. Intent Stats (Step 10 Analytics)
+    const categoryCountsRows = db.prepare(`
+      SELECT intent_category, COUNT(*) as count 
+      FROM leads 
+      GROUP BY intent_category
+    `).all();
+
+    const intentStats = {
+      hiringLeads: 0,
+      discussions: 0,
+      questions: 0,
+      showcases: 0,
+      openSource: 0,
+      falsePositives: 0,
+      totalScraped: totalLeads
+    };
+
+    categoryCountsRows.forEach(row => {
+      const cat = row.intent_category;
+      if (['Hiring', 'Buying Services', 'Looking for Cofounder'].includes(cat)) {
+        intentStats.hiringLeads += row.count;
+      } else {
+        intentStats.falsePositives += row.count;
+        if (cat === 'Question') intentStats.questions += row.count;
+        else if (cat === 'Showcase') intentStats.showcases += row.count;
+        else if (cat === 'Open Source') intentStats.openSource += row.count;
+        else intentStats.discussions += row.count;
+      }
+    });
+
     res.json({
       success: true,
       summary: {
@@ -127,7 +157,8 @@ export const getAnalytics = (req, res) => {
         highPriorityLeads,
         avgBudget,
         avgScore,
-        todaysNewClients
+        todaysNewClients,
+        intentStats
       },
       charts: {
         budgetDist,

@@ -5,6 +5,7 @@ import { scrapeHackerNews } from './hnScraper.js';
 import { scrapeRemoteOK } from './remoteokScraper.js';
 import { scrapeDevTo, scrapeGitHubDiscussions, scrapeWellfound } from './othersScraper.js';
 import { sendDesktopNotification } from '../services/notifier.js';
+import { analyzeLead } from '../services/analyzer.js';
 
 export async function runScrapers() {
   logger.info('Starting lead scraping cycle...');
@@ -86,23 +87,52 @@ export async function runScrapers() {
       id, title, description, url, author, created_time, 
       estimated_budget, technology, platform, location, company, 
       source, score, ai_summary, ai_risks, ai_estimated_hours, 
-      ai_suggested_tech, status
+      ai_suggested_tech, status,
+      intent_category, hiring_intent_score, confidence_score, 
+      confidence_reason, client_type, extracted_technologies, urgency_level,
+      opportunity_type, is_potential_client
     ) VALUES (
       @id, @title, @description, @url, @author, @created_time, 
       @estimated_budget, @technology, @platform, @location, @company, 
       @source, @score, @ai_summary, @ai_risks, @ai_estimated_hours, 
-      @ai_suggested_tech, @status
+      @ai_suggested_tech, @status,
+      @intent_category, @hiring_intent_score, @confidence_score, 
+      @confidence_reason, @client_type, @extracted_technologies, @urgency_level,
+      @opportunity_type, @is_potential_client
     )
   `);
 
-  for (const lead of allNewLeads) {
+  for (let lead of allNewLeads) {
     const existing = checkDuplicate.get(lead.id, lead.url);
     if (!existing) {
       try {
-        insertLead.run(lead);
+        // Enforce central intent and classification enrichment
+        const analysis = analyzeLead(lead.title, lead.description);
+        const enrichedLead = {
+          ...lead,
+          estimated_budget: analysis.estimatedBudget,
+          technology: analysis.technology,
+          platform: analysis.platform,
+          score: analysis.score,
+          ai_summary: analysis.summary,
+          ai_risks: analysis.risks,
+          ai_estimated_hours: analysis.estimatedHours,
+          ai_suggested_tech: analysis.suggestedTech,
+          intent_category: analysis.intent_category,
+          hiring_intent_score: analysis.hiring_intent_score,
+          confidence_score: analysis.confidence_score,
+          confidence_reason: analysis.confidence_reason,
+          client_type: analysis.client_type,
+          extracted_technologies: analysis.extracted_technologies,
+          urgency_level: analysis.urgency_level,
+          opportunity_type: analysis.opportunity_type,
+          is_potential_client: analysis.is_potential_client
+        };
+
+        insertLead.run(enrichedLead);
         insertedCount++;
         // Send desktop notification
-        sendDesktopNotification(lead);
+        sendDesktopNotification(enrichedLead);
       } catch (err) {
         logger.error(`Failed to insert lead ${lead.url}: ${err.message}`);
       }

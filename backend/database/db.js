@@ -46,6 +46,15 @@ db.exec(`
     ai_suggested_tech TEXT,
     status TEXT DEFAULT 'New',
     notes TEXT,
+    intent_category TEXT,
+    hiring_intent_score INTEGER DEFAULT 0,
+    confidence_score INTEGER DEFAULT 0,
+    confidence_reason TEXT,
+    client_type TEXT,
+    extracted_technologies TEXT,
+    urgency_level TEXT DEFAULT 'Low',
+    opportunity_type TEXT,
+    is_potential_client INTEGER DEFAULT 1,
     created_at INTEGER DEFAULT (strftime('%s', 'now'))
   );
 
@@ -69,6 +78,28 @@ db.exec(`
     error_message TEXT
   );
 `);
+
+// Migration: Alter leads table to add classification columns for existing DBs
+const columnsToAdd = [
+  { name: 'intent_category', type: 'TEXT' },
+  { name: 'hiring_intent_score', type: 'INTEGER DEFAULT 0' },
+  { name: 'confidence_score', type: 'INTEGER DEFAULT 0' },
+  { name: 'confidence_reason', type: 'TEXT' },
+  { name: 'client_type', type: 'TEXT' },
+  { name: 'extracted_technologies', type: 'TEXT' },
+  { name: 'urgency_level', type: 'TEXT DEFAULT \'Low\'' },
+  { name: 'opportunity_type', type: 'TEXT' },
+  { name: 'is_potential_client', type: 'INTEGER DEFAULT 1' }
+];
+
+for (const col of columnsToAdd) {
+  try {
+    db.exec(`ALTER TABLE leads ADD COLUMN ${col.name} ${col.type}`);
+    logger.info(`Database migration: Added column ${col.name} to leads table.`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+}
 
 // Insert default settings if they do not exist
 const defaultSettings = {

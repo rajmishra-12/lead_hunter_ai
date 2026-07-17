@@ -15,7 +15,8 @@ export const getLeads = (req, res) => {
       minBudget = 0,
       status = '',
       sortBy = 'created_time',
-      sortOrder = 'DESC'
+      sortOrder = 'DESC',
+      showDiscussions = 'false'
     } = req.query;
 
     const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -28,6 +29,10 @@ export const getLeads = (req, res) => {
       LEFT JOIN saved s ON l.id = s.lead_id
       WHERE 1=1
     `;
+
+    if (showDiscussions !== 'true') {
+      queryStr += ` AND (l.is_potential_client = 1 OR l.is_potential_client IS NULL)`;
+    }
     const params = [];
 
     if (search) {

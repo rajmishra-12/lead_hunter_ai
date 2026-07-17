@@ -154,6 +154,47 @@ const Analytics = () => {
         </div>
       </div>
 
+      {/* Intent Category Breakdown (Step 10 Analytics) */}
+      {analyticsData?.summary?.intentStats && (
+        <div className="glass-panel p-6 rounded-2xl">
+          <h3 className="text-sm font-extrabold text-slate-300 uppercase tracking-wider mb-5">Intent Classification & Scraper Filter Breakdown</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+            <div className="p-4 rounded-xl bg-dark-900/60 border border-dark-700/60 text-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Total Scraped</span>
+              <span className="text-xl font-extrabold text-white">{analyticsData.summary.intentStats.totalScraped}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase block mb-1">Hiring Leads</span>
+              <span className="text-xl font-extrabold text-emerald-400">{analyticsData.summary.intentStats.hiringLeads}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-center">
+              <span className="text-[10px] font-bold text-rose-400 uppercase block mb-1">Filtered Out</span>
+              <span className="text-xl font-extrabold text-rose-400">{analyticsData.summary.intentStats.falsePositives}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-dark-900/60 border border-dark-700/60 text-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Discussions</span>
+              <span className="text-xl font-extrabold text-slate-300">{analyticsData.summary.intentStats.discussions}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-dark-900/60 border border-dark-700/60 text-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Questions</span>
+              <span className="text-xl font-extrabold text-slate-300">{analyticsData.summary.intentStats.questions}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-dark-900/60 border border-dark-700/60 text-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Showcases</span>
+              <span className="text-xl font-extrabold text-slate-300">{analyticsData.summary.intentStats.showcases}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-dark-900/60 border border-dark-700/60 text-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Open Source</span>
+              <span className="text-xl font-extrabold text-slate-300">{analyticsData.summary.intentStats.openSource}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-center">
+              <span className="text-[10px] font-bold text-rose-400 block mb-1 uppercase">False Positives</span>
+              <span className="text-xl font-extrabold text-rose-400">{analyticsData.summary.intentStats.falsePositives}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Info Warning */}
       <div className="p-4 bg-dark-900/50 rounded-xl border border-dark-700/60 flex items-start gap-3">
         <FiInfo className="w-5 h-5 text-brand-accent mt-0.5 shrink-0" />

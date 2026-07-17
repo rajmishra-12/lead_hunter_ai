@@ -21,6 +21,7 @@ const Leads = () => {
   const [minBudgetFilter, setMinBudgetFilter] = useState('0');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('created_time');
+  const [showDiscussions, setShowDiscussions] = useState(false);
 
   // Active Lead Details state
   const [activeLeadId, setActiveLeadId] = useState(activeIdParam || null);
@@ -53,6 +54,7 @@ const Leads = () => {
       minBudget: minBudgetFilter,
       status: statusFilter,
       sortBy,
+      showDiscussions: showDiscussions.toString(),
       limit: 100
     }],
     queryFn: () => leadsService.getLeads({
@@ -63,6 +65,7 @@ const Leads = () => {
       minBudget: minBudgetFilter,
       status: statusFilter,
       sortBy,
+      showDiscussions: showDiscussions.toString(),
       limit: 100
     })
   });
@@ -255,6 +258,17 @@ const Leads = () => {
           <option value="estimated_budget">Highest Budget</option>
           <option value="score">Highest Match Score</option>
         </select>
+
+        {/* Community Discussions Toggle */}
+        <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-400 hover:text-white transition-colors pl-2 border-l border-dark-700/60">
+          <input
+            type="checkbox"
+            checked={showDiscussions}
+            onChange={(e) => setShowDiscussions(e.target.checked)}
+            className="rounded border-dark-600 bg-dark-800 text-purple-600 focus:ring-purple-500/20 focus:ring-offset-0 focus:ring-2 w-3.5 h-3.5 cursor-pointer"
+          />
+          <span>Show Discussions</span>
+        </label>
       </div>
 
       {/* Main Split Content Area */}
@@ -305,11 +319,36 @@ const Leads = () => {
                   `}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <h3 className={`text-sm font-extrabold font-sans line-clamp-1 transition-all ${isActive ? 'text-white' : 'text-slate-200'}`}>
-                      {lead.title}
-                    </h3>
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {lead.intent_category && (
+                          <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
+                            ['Hiring', 'Buying Services', 'Looking for Cofounder'].includes(lead.intent_category)
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : (lead.intent_category === 'Selling Services'
+                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                  : 'bg-slate-800 text-slate-400 border-dark-600')
+                          }`}>
+                            {lead.intent_category}
+                          </span>
+                        )}
+                        {lead.opportunity_type && lead.opportunity_type !== 'Ignore' && (
+                          <span className="text-[8px] font-semibold bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/20">
+                            {lead.opportunity_type}
+                          </span>
+                        )}
+                        {lead.client_type && (
+                          <span className="text-[8px] font-semibold bg-dark-800 text-slate-400 px-1.5 py-0.5 rounded border border-dark-700/60">
+                            {lead.client_type}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className={`text-sm font-extrabold font-sans line-clamp-1 transition-all ${isActive ? 'text-white' : 'text-slate-200'}`}>
+                        {lead.title}
+                      </h3>
+                    </div>
                     <span className={`text-[9px] px-2 py-0.5 rounded-full border shrink-0 font-bold ${scoreColor}`}>
-                      Score {lead.score}
+                      Match {lead.score}%
                     </span>
                   </div>
 
@@ -404,6 +443,46 @@ const Leads = () => {
                     <FiExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>
+              </div>
+
+              {/* Intent & Confidence Assessment */}
+              <div className="grid grid-cols-2 gap-4 bg-dark-900/60 p-4 rounded-xl border border-dark-700/60">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Hiring Intent Score</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-extrabold text-white">{activeLead.hiring_intent_score ?? activeLead.score}%</span>
+                    {activeLead.intent_category && (
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase ${
+                        ['Hiring', 'Buying Services', 'Looking for Cofounder'].includes(activeLead.intent_category)
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : 'bg-slate-800 text-slate-400 border-dark-600'
+                      }`}>
+                        {activeLead.intent_category}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Classification Confidence</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-extrabold text-white">{activeLead.confidence_score ?? 100}%</span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase bg-dark-800 text-slate-400 border-dark-700">
+                      {activeLead.client_type || 'Client'}
+                    </span>
+                  </div>
+                </div>
+                {activeLead.opportunity_type && (
+                  <div className="col-span-2 text-[11px] text-slate-400">
+                    <strong className="text-slate-350 font-bold block mb-0.5">Opportunity Type:</strong>
+                    <span className="text-white bg-dark-800 border border-dark-700 px-2 py-0.5 rounded text-[10px] font-semibold">{activeLead.opportunity_type}</span>
+                  </div>
+                )}
+                {activeLead.confidence_reason && (
+                  <div className="col-span-2 text-[11px] text-slate-400 leading-relaxed border-t border-dark-700/40 pt-2.5 mt-1">
+                    <strong className="text-slate-350 font-bold block mb-0.5">Classification Logic:</strong>
+                    {activeLead.confidence_reason}
+                  </div>
+                )}
               </div>
 
               {/* AI Details Heuristics */}
