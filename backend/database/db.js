@@ -55,6 +55,7 @@ db.exec(`
     urgency_level TEXT DEFAULT 'Low',
     opportunity_type TEXT,
     is_potential_client INTEGER DEFAULT 1,
+    raw_gemini_json TEXT,
     created_at INTEGER DEFAULT (strftime('%s', 'now'))
   );
 
@@ -89,7 +90,8 @@ const columnsToAdd = [
   { name: 'extracted_technologies', type: 'TEXT' },
   { name: 'urgency_level', type: 'TEXT DEFAULT \'Low\'' },
   { name: 'opportunity_type', type: 'TEXT' },
-  { name: 'is_potential_client', type: 'INTEGER DEFAULT 1' }
+  { name: 'is_potential_client', type: 'INTEGER DEFAULT 1' },
+  { name: 'raw_gemini_json', type: 'TEXT' }
 ];
 
 for (const col of columnsToAdd) {

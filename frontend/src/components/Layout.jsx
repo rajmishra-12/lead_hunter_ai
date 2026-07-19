@@ -10,18 +10,27 @@ const Layout = ({ children }) => {
   const navigate = useNavigate();
   const [quickSearch, setQuickSearch] = useState('');
 
-  // Manual Scrape Trigger
-  const scrapeMutation = useMutation({
-    mutationFn: leadsService.triggerScraping,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['analytics'] });
-      alert('Scraper execution completed successfully!');
-    },
-    onError: (err) => {
-      alert(`Scraper execution failed: ${err.message}`);
+  const [isScanning, setIsScanning] = useState(false);
+
+  React.useEffect(() => {
+    const handleScanStart = () => setIsScanning(true);
+    const handleScanEnd = () => setIsScanning(false);
+    window.addEventListener('dashboard-scan-start', handleScanStart);
+    window.addEventListener('dashboard-scan-end', handleScanEnd);
+    return () => {
+      window.removeEventListener('dashboard-scan-start', handleScanStart);
+      window.removeEventListener('dashboard-scan-end', handleScanEnd);
+    };
+  }, []);
+
+  const handleHeaderScan = () => {
+    if (window.location.pathname !== '/') {
+      navigate('/');
     }
-  });
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('trigger-dashboard-scan'));
+    }, 150);
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -57,12 +66,12 @@ const Layout = ({ children }) => {
           {/* Quick Actions */}
           <div className="flex items-center gap-4">
             <button
-              onClick={() => scrapeMutation.mutate()}
-              disabled={scrapeMutation.isPending}
+              onClick={handleHeaderScan}
+              disabled={isScanning}
               className="flex items-center gap-2 bg-gradient-to-r from-brand-accent to-indigo-600 hover:from-brand-accent hover:to-indigo-500 active:scale-95 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-glow transition-all"
             >
-              <FiRefreshCw className={`w-3.5 h-3.5 ${scrapeMutation.isPending ? 'animate-spin' : ''}`} />
-              <span>{scrapeMutation.isPending ? 'Syncing...' : 'Scan Now'}</span>
+              <FiRefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+              <span>{isScanning ? 'Syncing...' : 'Scan Now'}</span>
             </button>
             
             <a

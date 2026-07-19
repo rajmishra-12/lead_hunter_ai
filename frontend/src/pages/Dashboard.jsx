@@ -1,6 +1,6 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { analyticsService, leadsService } from '../services/api.js';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { analyticsService, leadsService, settingsService } from '../services/api.js';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -13,16 +13,70 @@ import { Link } from 'react-router-dom';
 const COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#f43f5e'];
 
 const Dashboard = () => {
+  const queryClient = useQueryClient();
+  const [isScanning, setIsScanning] = React.useState(false);
+  const [scanStatus, setScanStatus] = React.useState('');
+  const [scanProgress, setScanProgress] = React.useState(0);
+  const [scanError, setScanError] = React.useState('');
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: settingsService.getSettings
+  });
+  const settings = settingsData?.settings || {};
+
   const { data: analyticsData, isLoading: analyticsLoading } = useQuery({
     queryKey: ['analytics'],
-    queryFn: analyticsService.getAnalytics,
-    refetchInterval: 30000 // auto-refresh analytics every 30s
+    queryFn: analyticsService.getAnalytics
   });
 
   const { data: leadsData, isLoading: leadsLoading } = useQuery({
     queryKey: ['leads', { limit: 5 }],
     queryFn: () => leadsService.getLeads({ limit: 5 })
   });
+
+  const handleScan = React.useCallback(async () => {
+    setIsScanning(true);
+    setScanProgress(0);
+    setScanStatus('Starting scan...');
+    setScanError('');
+    window.dispatchEvent(new CustomEvent('dashboard-scan-start'));
+
+    try {
+      await leadsService.triggerScanStream((chunk) => {
+        if (chunk.phase) {
+          setScanStatus(chunk.message);
+          setScanProgress(chunk.progress);
+        }
+        if (chunk.phase === 'error') {
+          setScanError(chunk.message);
+        }
+        if (chunk.phase === 'refreshing') {
+          queryClient.invalidateQueries({ queryKey: ['analytics'] });
+          queryClient.invalidateQueries({ queryKey: ['leads'] });
+          queryClient.invalidateQueries({ queryKey: ['settings'] });
+        }
+      });
+    } catch (err) {
+      console.error('Scan execution error:', err);
+      setScanError(`Scan failed: ${err.message}`);
+    } finally {
+      setIsScanning(false);
+      window.dispatchEvent(new CustomEvent('dashboard-scan-end'));
+    }
+  }, [queryClient]);
+
+  React.useEffect(() => {
+    const handleTriggerScan = () => {
+      if (!isScanning) {
+        handleScan();
+      }
+    };
+    window.addEventListener('trigger-dashboard-scan', handleTriggerScan);
+    return () => {
+      window.removeEventListener('trigger-dashboard-scan', handleTriggerScan);
+    };
+  }, [isScanning, handleScan]);
 
   if (analyticsLoading || leadsLoading) {
     return (
@@ -55,11 +109,104 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8">
-      {/* Title */}
-      <div>
-        <h2 className="text-3xl font-extrabold text-white font-sans tracking-tight">Home Dashboard</h2>
-        <p className="text-slate-400 text-sm mt-1">Real-time freelance market updates and lead optimization.</p>
+      {/* Title & Scan Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-extrabold text-white font-sans tracking-tight">Home Dashboard</h2>
+          <p className="text-slate-400 text-sm mt-1">Real-time freelance market updates and lead optimization.</p>
+        </div>
+        <div>
+          <button
+            onClick={handleScan}
+            disabled={isScanning}
+            className={`px-5 py-2.5 rounded-xl font-bold text-sm tracking-wide transition-all shadow-lg flex items-center gap-2 ${
+              isScanning
+                ? 'bg-violet-600/30 border border-violet-500/20 text-violet-400 cursor-not-allowed'
+                : 'bg-brand-accent hover:bg-violet-600 text-white hover:shadow-violet-600/20 active:scale-95'
+            }`}
+          >
+            {isScanning ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-violet-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Scanning...
+              </>
+            ) : (
+              'Scan Now'
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Scanning Progress & Errors */}
+      {(isScanning || scanError) && (
+        <div className={`glass-panel p-6 rounded-2xl border bg-dark-900/40 shadow-xl space-y-4 animate-fadeIn ${
+          scanError ? 'border-brand-red/30 bg-brand-red/5' : 'border-violet-500/30 bg-violet-950/10 animate-pulse'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {scanError ? (
+                <div className="w-2.5 h-2.5 rounded-full bg-brand-red animate-ping" />
+              ) : (
+                <div className="w-2.5 h-2.5 rounded-full bg-violet-400 animate-ping" />
+              )}
+              <span className={`text-sm font-extrabold uppercase tracking-wider ${
+                scanError ? 'text-brand-red' : 'text-violet-300'
+              }`}>
+                {scanError || scanStatus || 'Initializing Scan...'}
+              </span>
+            </div>
+            {scanError ? (
+              <button 
+                onClick={() => setScanError('')}
+                className="text-xs font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-dark-800 border border-dark-700 hover:border-dark-600 transition-all"
+              >
+                Dismiss
+              </button>
+            ) : (
+              <span className="text-xs font-bold text-violet-400">{scanProgress}%</span>
+            )}
+          </div>
+          {!scanError && (
+            <div className="w-full bg-dark-800 rounded-full h-2.5 overflow-hidden border border-dark-700">
+              <div 
+                className="bg-brand-gradient h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${scanProgress}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Last Scan Stats Summary */}
+      {!isScanning && settings.lastScanTime && (
+        <div className="glass-panel p-5 rounded-2xl border border-dark-700/60 bg-dark-900/10 grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Last Scan Time</span>
+            <span className="text-xs font-bold text-white mt-1">
+              {new Date(parseInt(settings.lastScanTime, 10) * 1000).toLocaleString()}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Scanned</span>
+            <span className="text-sm font-extrabold text-white mt-1">{settings.lastScanTotalScanned || 0} posts</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Qualified Gigs</span>
+            <span className="text-sm font-extrabold text-emerald-400 mt-1">{settings.lastScanQualified || 0} leads</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filtered Posts</span>
+            <span className="text-sm font-extrabold text-slate-400 mt-1">{settings.lastScanFiltered || 0} posts</span>
+          </div>
+          <div className="flex flex-col col-span-2 md:col-span-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Scan Duration</span>
+            <span className="text-sm font-extrabold text-white mt-1">{settings.lastScanDuration || 0} seconds</span>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-5">

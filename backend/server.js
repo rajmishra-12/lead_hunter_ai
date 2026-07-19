@@ -7,7 +7,8 @@ import { logger } from './utils/logger.js';
 import leadsRoutes from './routes/leads.js';
 import settingsRoutes from './routes/settings.js';
 import analyticsRoutes from './routes/analytics.js';
-import { initScheduler } from './scheduler/cron.js';
+import scanRouter from './routes/scan.js';
+
 
 dotenv.config();
 
@@ -70,6 +71,8 @@ app.use((req, res, next) => {
 app.use('/api/leads', leadsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/scan', scanRouter);
+
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -85,8 +88,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start scheduler
-initScheduler(); // Server restart anchor v1.0.1
 
 // Start Server
 app.listen(PORT, '0.0.0.0', () => {
