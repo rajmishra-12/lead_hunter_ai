@@ -99,12 +99,12 @@ const Dashboard = () => {
   const recentLeads = leadsData?.leads || [];
 
   const kpis = [
-    { label: 'Total Leads', val: summary?.totalLeads, icon: FiTarget, color: 'text-violet-400 bg-violet-400/10' },
-    { label: "Today's Leads", val: summary?.todaysLeads, icon: FiClock, color: 'text-sky-400 bg-sky-400/10' },
-    { label: 'High Priority', val: summary?.highPriorityLeads, icon: FiTrendingUp, color: 'text-emerald-400 bg-emerald-400/10' },
-    { label: 'Avg Budget', val: `$${summary?.avgBudget?.toLocaleString()}`, icon: FiDollarSign, color: 'text-amber-400 bg-amber-400/10' },
-    { label: 'Avg Score', val: `${summary?.avgScore}/100`, icon: FiAlertCircle, color: 'text-rose-400 bg-rose-400/10' },
-    { label: 'Today Clients', val: summary?.todaysNewClients, icon: FiUsers, color: 'text-pink-400 bg-pink-400/10' }
+    { label: 'Total Qualified', val: summary?.totalLeads || 0, icon: FiTarget, color: 'text-violet-400 bg-violet-400/10', sub: `${summary?.totalScanned || 0} total scanned` },
+    { label: "Today's Qualified", val: summary?.todaysLeads || 0, icon: FiClock, color: 'text-sky-400 bg-sky-400/10', sub: 'Last 24 hours' },
+    { label: 'High Priority ($1k+)', val: summary?.highPriorityLeads || 0, icon: FiTrendingUp, color: 'text-emerald-400 bg-emerald-400/10', sub: 'Score ≥ 75' },
+    { label: 'Avg Project Budget', val: `$${(summary?.avgBudget || 0).toLocaleString()}`, icon: FiDollarSign, color: 'text-amber-400 bg-amber-400/10', sub: 'Target ≥ $1,000' },
+    { label: 'Avg Match Score', val: `${summary?.avgScore || 0}/100`, icon: FiAlertCircle, color: 'text-rose-400 bg-rose-400/10', sub: 'Qualified leads' },
+    { label: 'Active Clients', val: summary?.todaysNewClients || 0, icon: FiUsers, color: 'text-pink-400 bg-pink-400/10', sub: 'Distinct clients' }
   ];
 
   return (
@@ -220,10 +220,77 @@ const Dashboard = () => {
                   <Icon className="w-4 h-4" />
                 </div>
               </div>
-              <span className="text-2xl font-extrabold text-white tracking-tight mt-3">{kpi.val}</span>
+              <div>
+                <span className="text-2xl font-extrabold text-white tracking-tight">{kpi.val}</span>
+                {kpi.sub && <span className="block text-[10px] text-slate-500 font-medium mt-0.5">{kpi.sub}</span>}
+              </div>
             </div>
           );
         })}
+      </div>
+
+      {/* Workflow Category Quick Links */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <Link 
+          to="/leads" 
+          className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all flex items-center justify-between"
+        >
+          <div>
+            <div className="text-[10px] font-bold uppercase text-emerald-400">High-Priority Paid</div>
+            <div className="text-xs text-slate-300 font-semibold">$1,000+ Budget</div>
+          </div>
+          <span className="text-xs font-extrabold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full">
+            {summary?.categoryCounts?.highPriority || 0}
+          </span>
+        </Link>
+        <Link 
+          to="/leads" 
+          className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-all flex items-center justify-between"
+        >
+          <div>
+            <div className="text-[10px] font-bold uppercase text-amber-400">Budget Unknown</div>
+            <div className="text-xs text-slate-300 font-semibold">High-Intent Leads</div>
+          </div>
+          <span className="text-xs font-extrabold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full">
+            {summary?.categoryCounts?.budgetUnknown || 0}
+          </span>
+        </Link>
+        <Link 
+          to="/leads" 
+          className="p-3 rounded-xl border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all flex items-center justify-between"
+        >
+          <div>
+            <div className="text-[10px] font-bold uppercase text-purple-400">Agency Contracts</div>
+            <div className="text-xs text-slate-300 font-semibold">Subcontract Work</div>
+          </div>
+          <span className="text-xs font-extrabold text-purple-400 bg-purple-500/20 px-2 py-0.5 rounded-full">
+            {summary?.categoryCounts?.agency || 0}
+          </span>
+        </Link>
+        <Link 
+          to="/leads" 
+          className="p-3 rounded-xl border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 transition-all flex items-center justify-between"
+        >
+          <div>
+            <div className="text-[10px] font-bold uppercase text-sky-400">Needs Review</div>
+            <div className="text-xs text-slate-300 font-semibold">Score 40-74</div>
+          </div>
+          <span className="text-xs font-extrabold text-sky-400 bg-sky-500/20 px-2 py-0.5 rounded-full">
+            {summary?.categoryCounts?.manualReview || 0}
+          </span>
+        </Link>
+        <Link 
+          to="/leads" 
+          className="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 transition-all flex items-center justify-between"
+        >
+          <div>
+            <div className="text-[10px] font-bold uppercase text-rose-400">Excluded Leads</div>
+            <div className="text-xs text-slate-400 font-semibold">Non-Dev / Noise</div>
+          </div>
+          <span className="text-xs font-extrabold text-rose-400 bg-rose-500/20 px-2 py-0.5 rounded-full">
+            {summary?.categoryCounts?.rejected || 0}
+          </span>
+        </Link>
       </div>
 
       {/* Primary Graphs Row */}

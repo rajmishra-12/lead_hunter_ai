@@ -56,6 +56,18 @@ db.exec(`
     opportunity_type TEXT,
     is_potential_client INTEGER DEFAULT 1,
     raw_gemini_json TEXT,
+    budget_min_usd REAL DEFAULT 0,
+    budget_max_usd REAL DEFAULT 0,
+    budget_status TEXT DEFAULT 'unknown',
+    author_intent TEXT,
+    engagement_type TEXT,
+    payment_status TEXT,
+    scope_clarity TEXT,
+    recommended_action TEXT,
+    exclusion_reason TEXT,
+    qualification_category TEXT DEFAULT 'manual_review',
+    is_development_related INTEGER DEFAULT 1,
+    is_hiring INTEGER DEFAULT 1,
     created_at INTEGER DEFAULT (strftime('%s', 'now'))
   );
 
@@ -91,7 +103,19 @@ const columnsToAdd = [
   { name: 'urgency_level', type: 'TEXT DEFAULT \'Low\'' },
   { name: 'opportunity_type', type: 'TEXT' },
   { name: 'is_potential_client', type: 'INTEGER DEFAULT 1' },
-  { name: 'raw_gemini_json', type: 'TEXT' }
+  { name: 'raw_gemini_json', type: 'TEXT' },
+  { name: 'budget_min_usd', type: 'REAL DEFAULT 0' },
+  { name: 'budget_max_usd', type: 'REAL DEFAULT 0' },
+  { name: 'budget_status', type: 'TEXT DEFAULT \'unknown\'' },
+  { name: 'author_intent', type: 'TEXT' },
+  { name: 'engagement_type', type: 'TEXT' },
+  { name: 'payment_status', type: 'TEXT' },
+  { name: 'scope_clarity', type: 'TEXT' },
+  { name: 'recommended_action', type: 'TEXT' },
+  { name: 'exclusion_reason', type: 'TEXT' },
+  { name: 'qualification_category', type: 'TEXT DEFAULT \'manual_review\'' },
+  { name: 'is_development_related', type: 'INTEGER DEFAULT 1' },
+  { name: 'is_hiring', type: 'INTEGER DEFAULT 1' }
 ];
 
 for (const col of columnsToAdd) {
@@ -105,7 +129,7 @@ for (const col of columnsToAdd) {
 
 // Insert default settings if they do not exist
 const defaultSettings = {
-  sources: 'reddit,hn,devto,remoteok,github,wellfound',
+  sources: 'reddit',
   keywords: 'Flutter,React Native,iOS,Android,Mobile App,App Developer,Need Developer,Looking For Developer,MVP,Startup,Firebase,Node.js,API,AI App,SaaS,Cross Platform',
   enableDesktopNotifications: 'true',
   minScoreNotification: '85',
@@ -114,13 +138,12 @@ const defaultSettings = {
   autoRefreshInterval: '5'
 };
 
-const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+const insertSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
 const transaction = db.transaction((settingsObj) => {
   for (const [key, val] of Object.entries(settingsObj)) {
     insertSetting.run(key, val);
   }
 });
-
 transaction(defaultSettings);
 
 logger.success('Database initialized successfully.');

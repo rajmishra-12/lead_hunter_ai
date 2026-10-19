@@ -16,11 +16,19 @@ export const getLeads = (req, res) => {
       status = '',
       sortBy = 'created_time',
       sortOrder = 'DESC',
-      showDiscussions = 'false'
+      showDiscussions = 'false',
+      view = '', // 'high_priority', 'budget_unknown', 'agency', 'manual_review', 'rejected', 'all'
+      tab = '',
+      timeframe = '', // '24h', '3d', '7d', 'all'
+      budgetFilter = '', // '1000+', 'confirmed', 'unknown', 'below_1000'
+      clientType = '', // 'direct_client', 'agency'
+      minScore = 0
     } = req.query;
 
+    const selectedView = view || tab || '';
     const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const parsedLimit = parseInt(limit, 10);
+    const nowEpoch = Math.floor(Date.now() / 1000);
 
     let queryStr = `
       SELECT l.*, 
@@ -29,15 +37,78 @@ export const getLeads = (req, res) => {
       LEFT JOIN saved s ON l.id = s.lead_id
       WHERE 1=1
     `;
-
-    if (showDiscussions !== 'true') {
-      queryStr += ` AND (l.is_potential_client = 1 OR l.is_potential_client IS NULL)`;
-    }
     const params = [];
 
+    // 1. View / Tab Segmentation
+    if (selectedView === 'high_priority') {
+      queryStr += ` AND (l.qualification_category = 'high_priority' OR (l.score >= 75 AND l.is_potential_client = 1 AND (l.budget_status = 'confirmed' OR l.estimated_budget >= 1000))) AND l.qualification_category != 'rejected' AND l.score >= 40`;
+    } else if (selectedView === 'budget_unknown') {
+      queryStr += ` AND (l.qualification_category = 'budget_unknown' OR (l.is_potential_client = 1 AND l.budget_status = 'unknown' AND l.score >= 60)) AND l.qualification_category != 'rejected' AND l.score >= 40`;
+    } else if (selectedView === 'agency') {
+      queryStr += ` AND (l.qualification_category = 'agency_contract' OR (l.is_potential_client = 1 AND (l.engagement_type = 'agency_subcontract' OR l.client_type = 'Agency'))) AND l.qualification_category != 'rejected' AND l.score >= 40`;
+    } else if (selectedView === 'manual_review') {
+      queryStr += ` AND (l.qualification_category = 'manual_review' OR (l.is_potential_client = 1 AND l.score BETWEEN 40 AND 74) OR l.payment_status = 'ambiguous') AND l.qualification_category != 'rejected' AND l.score >= 40`;
+    } else if (selectedView === 'rejected') {
+      queryStr += ` AND (l.qualification_category = 'rejected' OR l.is_potential_client = 0 OR l.score < 40 OR l.exclusion_reason IS NOT NULL)`;
+    } else if (selectedView === 'all') {
+      // Include all leads without category restriction
+    } else {
+      // Default: Exclude rejected leads from the main qualified list (must have score >= 40)
+      queryStr += ` AND l.is_potential_client = 1 AND l.score >= 40 AND (l.qualification_category != 'rejected' OR l.qualification_category IS NULL)`;
+    }
+
+    // 2. Timeframe Filter (Rolling window)
+    if (timeframe === '24h') {
+      queryStr += ` AND l.created_time >= ?`;
+      params.push(nowEpoch - 86400);
+    } else if (timeframe === '3d') {
+      queryStr += ` AND l.created_time >= ?`;
+      params.push(nowEpoch - (3 * 86400));
+    } else if (timeframe === '7d') {
+      queryStr += ` AND l.created_time >= ?`;
+      params.push(nowEpoch - (7 * 86400));
+    } else if (timeframe === '14d') {
+      queryStr += ` AND l.created_time >= ?`;
+      params.push(nowEpoch - (14 * 86400));
+    } else if (!timeframe && view !== 'rejected' && view !== 'all') {
+      // Default rolling window for qualified opportunities
+      queryStr += ` AND l.created_time >= ?`;
+      params.push(nowEpoch - (7 * 86400));
+    }
+
+    // 3. Budget Status & Amount Filter
+    if (budgetFilter === '1000+') {
+      queryStr += ` AND (l.estimated_budget >= 1000 OR l.budget_min_usd >= 1000)`;
+    } else if (budgetFilter === 'confirmed') {
+      queryStr += ` AND l.budget_status = 'confirmed'`;
+    } else if (budgetFilter === 'unknown') {
+      queryStr += ` AND (l.budget_status = 'unknown' OR l.estimated_budget = 0)`;
+    } else if (budgetFilter === 'below_1000') {
+      queryStr += ` AND ((l.estimated_budget > 0 AND l.estimated_budget < 1000) OR l.budget_status = 'below_1000')`;
+    }
+
+    if (minBudget && parseFloat(minBudget) > 0) {
+      queryStr += ` AND (l.estimated_budget >= ? OR l.budget_min_usd >= ?)`;
+      params.push(parseFloat(minBudget), parseFloat(minBudget));
+    }
+
+    // 4. Client Type Filter
+    if (clientType === 'direct_client') {
+      queryStr += ` AND (l.engagement_type = 'direct_freelance' OR l.client_type != 'Agency')`;
+    } else if (clientType === 'agency') {
+      queryStr += ` AND (l.engagement_type = 'agency_subcontract' OR l.client_type = 'Agency')`;
+    }
+
+    // 5. Minimum Score Filter
+    if (minScore && parseInt(minScore, 10) > 0) {
+      queryStr += ` AND l.score >= ?`;
+      params.push(parseInt(minScore, 10));
+    }
+
+    // 6. Search
     if (search) {
-      queryStr += ` AND (l.title LIKE ? OR l.description LIKE ? OR l.company LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      queryStr += ` AND (l.title LIKE ? OR l.description LIKE ? OR l.company LIKE ? OR l.technology LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     if (source) {
@@ -51,13 +122,8 @@ export const getLeads = (req, res) => {
     }
 
     if (urgency) {
-      queryStr += ` AND l.urgency = ?`;
+      queryStr += ` AND l.urgency_level = ?`;
       params.push(urgency);
-    }
-
-    if (minBudget && parseFloat(minBudget) > 0) {
-      queryStr += ` AND l.estimated_budget >= ?`;
-      params.push(parseFloat(minBudget));
     }
 
     if (status) {
@@ -82,11 +148,25 @@ export const getLeads = (req, res) => {
 
     const leads = db.prepare(queryStr).all(...params);
 
+    // Compute active counts for tabs
+    const highPriorityCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE (qualification_category = 'high_priority' OR (score >= 75 AND is_potential_client = 1 AND (budget_status = 'confirmed' OR estimated_budget >= 1000))) AND qualification_category != 'rejected' AND score >= 40`).get().count;
+    const budgetUnknownCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE (qualification_category = 'budget_unknown' OR (is_potential_client = 1 AND budget_status = 'unknown' AND score >= 60)) AND qualification_category != 'rejected' AND score >= 40`).get().count;
+    const agencyCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE (qualification_category = 'agency_contract' OR (is_potential_client = 1 AND (engagement_type = 'agency_subcontract' OR client_type = 'Agency'))) AND qualification_category != 'rejected' AND score >= 40`).get().count;
+    const manualReviewCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE (qualification_category = 'manual_review' OR (is_potential_client = 1 AND score BETWEEN 40 AND 74) OR payment_status = 'ambiguous') AND qualification_category != 'rejected' AND score >= 40`).get().count;
+    const rejectedCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE qualification_category = 'rejected' OR is_potential_client = 0 OR score < 40 OR exclusion_reason IS NOT NULL`).get().count;
+
     res.json({
       success: true,
       total,
       page: parseInt(page, 10),
       limit: parsedLimit,
+      tabCounts: {
+        highPriority: highPriorityCount,
+        budgetUnknown: budgetUnknownCount,
+        agency: agencyCount,
+        manualReview: manualReviewCount,
+        rejected: rejectedCount
+      },
       leads
     });
   } catch (err) {
@@ -232,12 +312,12 @@ export const getSavedLeads = (req, res) => {
 export const exportCSV = (req, res) => {
   try {
     const leads = db.prepare('SELECT * FROM leads ORDER BY created_time DESC').all();
-    let csv = 'ID,Title,Company,Source,Budget,Score,Status,URL,Created Time\n';
+    let csv = 'ID,Title,Company,Source,Budget,Score,Status,URL,Created Time,Category\n';
     
     for (const lead of leads) {
       const cleanTitle = (lead.title || '').replace(/"/g, '""');
       const cleanCompany = (lead.company || '').replace(/"/g, '""');
-      csv += `"${lead.id}","${cleanTitle}","${cleanCompany}","${lead.source}",${lead.estimated_budget || 0},${lead.score || 0},"${lead.status}","${lead.url}",${lead.created_time}\n`;
+      csv += `"${lead.id}","${cleanTitle}","${cleanCompany}","${lead.source}",${lead.estimated_budget || 0},${lead.score || 0},"${lead.status}","${lead.url}",${lead.created_time},"${lead.qualification_category || 'general'}"\n`;
     }
     
     res.setHeader('Content-Type', 'text/csv');

@@ -1,82 +1,21 @@
 import db from '../database/db.js';
 import { logger } from '../utils/logger.js';
 import { scrapeReddit } from './redditScraper.js';
-import { scrapeHackerNews } from './hnScraper.js';
-import { scrapeRemoteOK } from './remoteokScraper.js';
-import { scrapeDevTo, scrapeGitHubDiscussions, scrapeWellfound } from './othersScraper.js';
 import { sendDesktopNotification } from '../services/notifier.js';
 import { analyzeLead } from '../services/analyzer.js';
+import { preFilterCandidate } from '../services/qualifier.js';
 
 export async function runScrapers() {
-  logger.info('Starting lead scraping cycle...');
-
-  // Fetch enabled sources from DB settings
-  const sourceSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('sources');
-  const enabledSources = sourceSetting ? sourceSetting.value.split(',') : [];
-
-  logger.info(`Enabled sources for scraping: ${enabledSources.join(', ')}`);
+  logger.info('Starting Reddit lead scraping cycle across 60 active groups...');
 
   let allNewLeads = [];
 
-  // Run scrapers dynamically
-  if (enabledSources.includes('reddit')) {
-    try {
-      const redditLeads = await scrapeReddit();
-      allNewLeads.push(...redditLeads);
-      recordHistory('reddit', redditLeads.length, 'SUCCESS', null);
-    } catch (err) {
-      recordHistory('reddit', 0, 'ERROR', err.message);
-    }
-  }
-
-  if (enabledSources.includes('hn')) {
-    try {
-      const hnLeads = await scrapeHackerNews();
-      allNewLeads.push(...hnLeads);
-      recordHistory('hn', hnLeads.length, 'SUCCESS', null);
-    } catch (err) {
-      recordHistory('hn', 0, 'ERROR', err.message);
-    }
-  }
-
-  if (enabledSources.includes('remoteok')) {
-    try {
-      const remoteokLeads = await scrapeRemoteOK();
-      allNewLeads.push(...remoteokLeads);
-      recordHistory('remoteok', remoteokLeads.length, 'SUCCESS', null);
-    } catch (err) {
-      recordHistory('remoteok', 0, 'ERROR', err.message);
-    }
-  }
-
-  if (enabledSources.includes('devto')) {
-    try {
-      const devtoLeads = await scrapeDevTo();
-      allNewLeads.push(...devtoLeads);
-      recordHistory('devto', devtoLeads.length, 'SUCCESS', null);
-    } catch (err) {
-      recordHistory('devto', 0, 'ERROR', err.message);
-    }
-  }
-
-  if (enabledSources.includes('github')) {
-    try {
-      const githubLeads = await scrapeGitHubDiscussions();
-      allNewLeads.push(...githubLeads);
-      recordHistory('github', githubLeads.length, 'SUCCESS', null);
-    } catch (err) {
-      recordHistory('github', 0, 'ERROR', err.message);
-    }
-  }
-
-  if (enabledSources.includes('wellfound')) {
-    try {
-      const wellfoundLeads = await scrapeWellfound();
-      allNewLeads.push(...wellfoundLeads);
-      recordHistory('wellfound', wellfoundLeads.length, 'SUCCESS', null);
-    } catch (err) {
-      recordHistory('wellfound', 0, 'ERROR', err.message);
-    }
+  try {
+    const redditLeads = await scrapeReddit();
+    allNewLeads.push(...redditLeads);
+    recordHistory('reddit', redditLeads.length, 'SUCCESS', null);
+  } catch (err) {
+    recordHistory('reddit', 0, 'ERROR', err.message);
   }
 
   // Insert unique leads to DB
@@ -90,7 +29,10 @@ export async function runScrapers() {
       ai_suggested_tech, status,
       intent_category, hiring_intent_score, confidence_score, 
       confidence_reason, client_type, extracted_technologies, urgency_level,
-      opportunity_type, is_potential_client
+      opportunity_type, is_potential_client,
+      budget_min_usd, budget_max_usd, budget_status, author_intent,
+      engagement_type, payment_status, scope_clarity, recommended_action,
+      exclusion_reason, qualification_category, is_development_related, is_hiring
     ) VALUES (
       @id, @title, @description, @url, @author, @created_time, 
       @estimated_budget, @technology, @platform, @location, @company, 
@@ -98,7 +40,10 @@ export async function runScrapers() {
       @ai_suggested_tech, @status,
       @intent_category, @hiring_intent_score, @confidence_score, 
       @confidence_reason, @client_type, @extracted_technologies, @urgency_level,
-      @opportunity_type, @is_potential_client
+      @opportunity_type, @is_potential_client,
+      @budget_min_usd, @budget_max_usd, @budget_status, @author_intent,
+      @engagement_type, @payment_status, @scope_clarity, @recommended_action,
+      @exclusion_reason, @qualification_category, @is_development_related, @is_hiring
     )
   `);
 
@@ -106,11 +51,19 @@ export async function runScrapers() {
     const existing = checkDuplicate.get(lead.id, lead.url);
     if (!existing) {
       try {
-        // Enforce central intent and classification enrichment
         const analysis = analyzeLead(lead.title, lead.description);
+        const budgetVal = analysis.estimatedBudget || 0;
+        const bStatus = budgetVal >= 1000 ? 'confirmed' : (budgetVal > 0 ? 'below_1000' : 'unknown');
+        const isClient = analysis.is_potential_client === 1;
+
+        let category = 'manual_review';
+        if (!isClient) category = 'rejected';
+        else if (analysis.score >= 75 && budgetVal >= 1000) category = 'high_priority';
+        else if (bStatus === 'unknown') category = 'budget_unknown';
+
         const enrichedLead = {
           ...lead,
-          estimated_budget: analysis.estimatedBudget,
+          estimated_budget: budgetVal,
           technology: analysis.technology,
           platform: analysis.platform,
           score: analysis.score,
@@ -126,13 +79,27 @@ export async function runScrapers() {
           extracted_technologies: analysis.extracted_technologies,
           urgency_level: analysis.urgency_level,
           opportunity_type: analysis.opportunity_type,
-          is_potential_client: analysis.is_potential_client
+          is_potential_client: analysis.is_potential_client,
+          budget_min_usd: budgetVal,
+          budget_max_usd: budgetVal,
+          budget_status: bStatus,
+          author_intent: isClient ? 'buyer' : 'unrelated',
+          engagement_type: analysis.opportunity_type === 'Contract' ? 'direct_freelance' : 'other',
+          payment_status: budgetVal > 0 ? 'paid_or_budgeted' : 'budget_unknown',
+          scope_clarity: 'medium',
+          recommended_action: 'Review lead requirements and reach out.',
+          exclusion_reason: isClient ? null : 'Filtered out by intent rules.',
+          qualification_category: category,
+          is_development_related: 1,
+          is_hiring: isClient ? 1 : 0
         };
 
         insertLead.run(enrichedLead);
         insertedCount++;
         // Send desktop notification
-        sendDesktopNotification(enrichedLead);
+        if (isClient && analysis.score >= 75) {
+          sendDesktopNotification(enrichedLead);
+        }
       } catch (err) {
         logger.error(`Failed to insert lead ${lead.url}: ${err.message}`);
       }

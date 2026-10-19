@@ -68,13 +68,8 @@ const Settings = () => {
   const handleSave = (e) => {
     e.preventDefault();
 
-    // Reconstruct active sources array
-    const activeSourcesArr = Object.entries(sources)
-      .filter(([_, enabled]) => enabled)
-      .map(([name]) => name);
-
     const payload = {
-      sources: activeSourcesArr.join(','),
+      sources: 'reddit',
       keywords,
       enableDesktopNotifications: String(enableDesktop),
       minScoreNotification: minScore,
@@ -105,31 +100,50 @@ const Settings = () => {
       <form onSubmit={handleSave} className="space-y-6">
         {/* Scraper Sources */}
         <div className="glass-panel p-6 rounded-2xl space-y-4">
-          <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-            <span>1. Lead Scraper Sources</span>
-          </h3>
-          <p className="text-xs text-slate-400">Enable or disable crawling specific freelancing opportunities sites.</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                <span>1. Active Platform Source: Reddit (205 Communities)</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">LeadHunter AI is dedicated exclusively to Reddit, scanning 205 active gig, startup, mobile, web, automation, AI, and developer communities.</p>
+            </div>
+            <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Reddit Active (205 Subreddits)
+            </span>
+          </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2">
-            {Object.entries(sources).map(([key, enabled]) => (
-              <label 
-                key={key} 
-                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between
-                  ${enabled 
-                    ? 'bg-brand-accent/15 border-brand-accent text-white font-bold' 
-                    : 'bg-dark-900/40 border-dark-700/60 text-slate-400 hover:border-dark-600'
-                  }
-                `}
-              >
-                <span className="capitalize font-semibold text-xs">{key === 'hn' ? 'Hacker News' : key}</span>
-                <input
-                  type="checkbox"
-                  checked={enabled}
-                  onChange={() => handleSourceToggle(key)}
-                  className="w-4 h-4 rounded text-brand-accent bg-dark-950 border-dark-700 focus:ring-brand-accent cursor-pointer"
-                />
-              </label>
-            ))}
+          <div className="p-4 bg-dark-950/60 border border-dark-800 rounded-xl space-y-2">
+            <p className="text-[11px] font-semibold text-slate-300">Monitored Reddit Hubs (205 Active Communities):</p>
+            <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {[
+                'r/forhire', 'r/freelance_forhire', 'r/jobbit', 'r/Hiring', 'r/remotework', 'r/RemoteJobs', 'r/freelance', 'r/Freelancers', 'r/DoneDirtCheap', 'r/slavelabour',
+                'r/techjobs', 'r/Jobs4Bitcoins', 'r/telecommute', 'r/WorkOnline', 'r/digitalnomad', 'r/remotejs', 'r/remote_jobs', 'r/devjobs', 'r/developersIndia', 'r/UKJobs',
+                'r/freelanceuk', 'r/Jobopenings', 'r/GigEconomy', 'r/Bounties', 'r/bounty_hunters', 'r/Entrepreneur', 'r/startups', 'r/SideProject', 'r/SaaS', 'r/smallbusiness',
+                'r/EntrepreneurRideAlong', 'r/MicroSaaS', 'r/IndieHackers', 'r/growmybusiness', 'r/roastmystartup', 'r/ecommerce', 'r/Shopify', 'r/dropship', 'r/cofounder', 'r/CoFounders',
+                'r/business', 'r/smallbiz', 'r/sweatystartup', 'r/Startup_Ideas', 'r/alphaandbetausers', 'r/ladybusiness', 'r/FulfillmentByAmazon', 'r/AmazonSeller', 'r/ShopifyDev', 'r/WooCommerce',
+                'r/BigCommerce', 'r/agency', 'r/digital_marketing', 'r/marketing', 'r/growthhacking', 'r/content_marketing', 'r/affiliatemarketing', 'r/AppEngine', 'r/LaunchThis', 'r/IMadeThis',
+                'r/AppDevelopers', 'r/FlutterDev', 'r/reactnative', 'r/iOSProgramming', 'r/androiddev', 'r/MobileAppDevelopment', 'r/SwiftUI', 'r/Flutter', 'r/dartlang', 'r/swift',
+                'r/kotlin', 'r/AndroidStudio', 'r/Xcode', 'r/iOSDev', 'r/flutterhelp', 'r/reactnative_dev', 'mobiledev', 'r/KMP', 'r/Capacitor', 'r/Cordova',
+                'r/Expo', 'r/Ionic', 'r/AppIdeas', 'r/AppBusiness', 'r/MobileDevs', 'r/webdev', 'r/WebDeveloperJobs', 'r/reactjs', 'r/nextjs', 'r/Frontend',
+                'r/javascript', 'r/typescript', 'r/vuejs', 'r/Wordpress', 'r/web_design', 'r/angular', 'r/sveltejs', 'r/nuxt', 'r/tailwind', 'r/css',
+                'r/HTML', 'r/FrontendMasters', 'r/ModernWeb', 'r/FullStack', 'r/FullStackJobs', 'r/Nodejs', 'r/expressjs', 'r/graphql', 'r/REST', 'r/webmasters',
+                'r/WordPressThemes', 'r/WordpressPlugins', 'r/elementor', 'r/webflow', 'r/framer', 'r/jamstack', 'r/astrojs', 'r/remixrun', 'r/vite', 'r/webpack',
+                'r/node', 'r/backend', 'r/Python', 'r/django', 'r/FastAPI', 'r/Flask', 'r/automations', 'r/automation', 'r/webscraping', 'r/devops',
+                'r/golang', 'r/rust', 'r/ruby', 'r/rails', 'r/php', 'r/laravel', 'r/PHPhelp', 'r/Java', 'r/spring', 'r/csharp',
+                'r/dotnet', 'r/sql', 'r/PostgreSQL', 'r/mysql', 'r/mongodb', 'r/redis', 'r/supabase', 'r/firebase', 'r/aws', 'r/googlecloud',
+                'r/azure', 'r/docker', 'r/kubernetes', 'r/serverless', 'r/microservices', 'r/n8n', 'r/zapier', 'r/make', 'r/airtable', 'r/notion',
+                'r/puppeteer', 'r/playwright', 'r/selenium', 'r/Scrapy', 'r/dataengineering', 'r/DataEngineeringJobs', 'r/sheets', 'r/excel', 'r/PowerBI', 'r/tableau',
+                'r/OpenAI', 'r/ChatGPTCoding', 'r/LangChain', 'r/LocalLLaMA', 'r/artificial', 'r/ClaudeAI', 'r/MachineLearning', 'r/datascience', 'r/ArtificialInteligence', 'r/PromptEngineering',
+                'r/OpenAIAPIs', 'r/LlamaIndex', 'r/StableDiffusion', 'r/computervision', 'r/HuggingFace', 'r/Ollama', 'r/AIBuilders', 'r/AICoding', 'r/midjourney', 'r/VectorDatabases',
+                'r/ethdev', 'r/solidity', 'r/Solana', 'r/smartcontracts', 'r/web3', 'r/crypto_jobs', 'r/stripe', 'r/FinTech', 'r/algotrading', 'r/CryptoCurrency',
+                'r/Bitcoin', 'r/defi', 'r/NFT', 'r/TradingView', 'r/InteractiveBrokers'
+              ].map((sub) => (
+                <span key={sub} className="px-2 py-0.5 bg-dark-800/80 border border-dark-700/60 rounded text-[10px] text-slate-300 font-mono">
+                  {sub}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 

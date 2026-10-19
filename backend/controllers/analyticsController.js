@@ -6,28 +6,40 @@ export const getAnalytics = (req, res) => {
     const nowEpoch = Math.floor(Date.now() / 1000);
     const oneDayAgo = nowEpoch - 86400; // 24 hours
 
-    // 1. KPI Metrics
-    const totalLeadsRow = db.prepare('SELECT COUNT(*) as count FROM leads').get();
+    // 1. KPI Metrics (Strictly based on genuinely qualified leads)
+    const qualifiedCondition = `(is_potential_client = 1 AND (qualification_category != 'rejected' OR qualification_category IS NULL))`;
+
+    const totalScannedRow = db.prepare('SELECT COUNT(*) as count FROM leads').get();
+    const totalScanned = totalScannedRow ? totalScannedRow.count : 0;
+
+    const totalLeadsRow = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE ${qualifiedCondition}`).get();
     const totalLeads = totalLeadsRow ? totalLeadsRow.count : 0;
 
-    const todaysLeadsRow = db.prepare('SELECT COUNT(*) as count FROM leads WHERE created_time >= ?').get(oneDayAgo);
+    const todaysLeadsRow = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE ${qualifiedCondition} AND created_time >= ?`).get(oneDayAgo);
     const todaysLeads = todaysLeadsRow ? todaysLeadsRow.count : 0;
 
-    const highPriorityRow = db.prepare('SELECT COUNT(*) as count FROM leads WHERE score >= 80').get();
+    const highPriorityRow = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE is_potential_client = 1 AND score >= 75`).get();
     const highPriorityLeads = highPriorityRow ? highPriorityRow.count : 0;
 
-    const avgBudgetRow = db.prepare('SELECT AVG(estimated_budget) as avg FROM leads WHERE estimated_budget > 0').get();
+    const avgBudgetRow = db.prepare(`SELECT AVG(estimated_budget) as avg FROM leads WHERE ${qualifiedCondition} AND estimated_budget > 0`).get();
     const avgBudget = avgBudgetRow && avgBudgetRow.avg ? Math.round(avgBudgetRow.avg) : 0;
 
-    const avgScoreRow = db.prepare('SELECT AVG(score) as avg FROM leads').get();
+    const avgScoreRow = db.prepare(`SELECT AVG(score) as avg FROM leads WHERE ${qualifiedCondition}`).get();
     const avgScore = avgScoreRow && avgScoreRow.avg ? Math.round(avgScoreRow.avg) : 0;
 
-    const todaysClientsRow = db.prepare('SELECT COUNT(DISTINCT company) as count FROM leads WHERE created_time >= ?').get(oneDayAgo);
+    const todaysClientsRow = db.prepare(`SELECT COUNT(DISTINCT company) as count FROM leads WHERE ${qualifiedCondition} AND created_time >= ?`).get(oneDayAgo);
     const todaysNewClients = todaysClientsRow ? todaysClientsRow.count : 0;
 
-    // 2. Budget Distribution Chart
+    // Workflow Category Counts
+    const highPriorityCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE qualification_category = 'high_priority' OR (score >= 75 AND is_potential_client = 1 AND (budget_status = 'confirmed' OR estimated_budget >= 1000))`).get().count;
+    const budgetUnknownCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE qualification_category = 'budget_unknown' OR (is_potential_client = 1 AND budget_status = 'unknown' AND score >= 60)`).get().count;
+    const agencyCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE qualification_category = 'agency_contract' OR (is_potential_client = 1 AND (engagement_type = 'agency_subcontract' OR client_type = 'Agency'))`).get().count;
+    const manualReviewCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE qualification_category = 'manual_review' OR (is_potential_client = 1 AND score BETWEEN 40 AND 74)`).get().count;
+    const rejectedCount = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE qualification_category = 'rejected' OR is_potential_client = 0 OR score < 40`).get().count;
+
+    // 2. Budget Distribution Chart for Qualified Leads
     // Brackets: <$500, $500-$1000, $1000-$2000, $2000-$5000, $5000+
-    const budgets = db.prepare('SELECT estimated_budget FROM leads').all();
+    const budgets = db.prepare(`SELECT estimated_budget FROM leads WHERE ${qualifiedCondition}`).all();
     const budgetDist = [
       { name: 'Under $500', value: 0 },
       { name: '$500 - $1k', value: 0 },
@@ -55,15 +67,18 @@ export const getAnalytics = (req, res) => {
     `).all();
     
     // Group subreddits together for cleaner chart representation
+    // Show distribution across subreddits
     const sourceSummaryMap = {};
     sourcesRows.forEach(row => {
-      let key = row.source;
+      let key = row.source || 'Other';
       if (key.startsWith('reddit/')) {
-        key = 'Reddit';
+        key = key.replace('reddit/', '');
       }
       sourceSummaryMap[key] = (sourceSummaryMap[key] || 0) + row.count;
     });
-    const sourceData = Object.entries(sourceSummaryMap).map(([name, value]) => ({ name, value }));
+    const sourceData = Object.entries(sourceSummaryMap)
+      .slice(0, 8)
+      .map(([name, value]) => ({ name, value }));
 
     // 4. Technology Stack Chart
     const techRows = db.prepare('SELECT technology FROM leads').all();
@@ -153,11 +168,19 @@ export const getAnalytics = (req, res) => {
       success: true,
       summary: {
         totalLeads,
+        totalScanned,
         todaysLeads,
         highPriorityLeads,
         avgBudget,
         avgScore,
         todaysNewClients,
+        categoryCounts: {
+          highPriority: highPriorityCount,
+          budgetUnknown: budgetUnknownCount,
+          agency: agencyCount,
+          manualReview: manualReviewCount,
+          rejected: rejectedCount
+        },
         intentStats
       },
       charts: {

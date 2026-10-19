@@ -4,7 +4,8 @@ import { useSearchParams } from 'react-router-dom';
 import { leadsService } from '../services/api.js';
 import { 
   FiSearch, FiFilter, FiBookmark, FiExternalLink, FiCopy, FiCheck, 
-  FiFileText, FiClock, FiDollarSign, FiChevronRight, FiBriefcase 
+  FiFileText, FiClock, FiDollarSign, FiChevronRight, FiBriefcase,
+  FiAlertCircle, FiCheckCircle, FiShield, FiTag, FiZap, FiUserCheck
 } from 'react-icons/fi';
 
 const Leads = () => {
@@ -12,16 +13,20 @@ const Leads = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeIdParam = searchParams.get('activeId');
 
+  // Active View Tab: 'high_priority', 'budget_unknown', 'agency', 'manual_review', 'rejected'
+  const [activeTab, setActiveTab] = useState('high_priority');
+
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [techFilter, setTechFilter] = useState('');
   const [urgencyFilter, setUrgencyFilter] = useState('');
-  const [minBudgetFilter, setMinBudgetFilter] = useState('0');
+  const [timeframeFilter, setTimeframeFilter] = useState('7d'); // Default rolling 7-day window
+  const [budgetFilter, setBudgetFilter] = useState(''); // '1000+', 'confirmed', 'unknown', 'below_1000'
+  const [clientTypeFilter, setClientTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [sortBy, setSortBy] = useState('created_time');
-  const [showDiscussions, setShowDiscussions] = useState(false);
+  const [sortBy, setSortBy] = useState('score');
 
   // Active Lead Details state
   const [activeLeadId, setActiveLeadId] = useState(activeIdParam || null);
@@ -33,7 +38,7 @@ const Leads = () => {
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchTerm);
-    }, 400);
+    }, 350);
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
@@ -44,28 +49,32 @@ const Leads = () => {
     }
   }, [activeIdParam]);
 
-  // Query Leads
+  // Query Leads with tab segmentation & filters
   const { data: leadsData, isLoading: listLoading } = useQuery({
     queryKey: ['leads', { 
+      view: activeTab,
       search: debouncedSearch, 
       source: sourceFilter, 
       technology: techFilter, 
       urgency: urgencyFilter, 
-      minBudget: minBudgetFilter,
+      timeframe: timeframeFilter,
+      budgetFilter: budgetFilter,
+      clientType: clientTypeFilter,
       status: statusFilter,
       sortBy,
-      showDiscussions: showDiscussions.toString(),
       limit: 100
     }],
     queryFn: () => leadsService.getLeads({
+      view: activeTab,
       search: debouncedSearch,
       source: sourceFilter,
       technology: techFilter,
       urgency: urgencyFilter,
-      minBudget: minBudgetFilter,
+      timeframe: timeframeFilter,
+      budgetFilter: budgetFilter,
+      clientType: clientTypeFilter,
       status: statusFilter,
       sortBy,
-      showDiscussions: showDiscussions.toString(),
       limit: 100
     })
   });
@@ -83,6 +92,13 @@ const Leads = () => {
       setNotesText(detailData.lead.notes || '');
     }
   }, [detailData]);
+
+  // Automatically select the first lead when list changes and none selected
+  useEffect(() => {
+    if (leadsData?.leads && leadsData.leads.length > 0 && !activeLeadId) {
+      setActiveLeadId(leadsData.leads[0].id);
+    }
+  }, [leadsData, activeLeadId]);
 
   // Mutation: Save/Unsave Lead
   const toggleSaveMutation = useMutation({
@@ -113,12 +129,13 @@ const Leads = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['savedLeads'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
       setActiveLeadId(null);
     }
   });
 
   const handleClearLeads = () => {
-    if (window.confirm('Are you sure you want to delete all leads from the database? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to clear all leads from the database? This action cannot be undone.')) {
       clearLeadsMutation.mutate();
     }
   };
@@ -142,167 +159,258 @@ const Leads = () => {
   };
 
   const leads = leadsData?.leads || [];
+  const tabCounts = leadsData?.tabCounts || {
+    highPriority: 0,
+    budgetUnknown: 0,
+    agency: 0,
+    manualReview: 0,
+    rejected: 0
+  };
   const activeLead = detailData?.lead;
   const proposals = detailData?.proposals;
 
+  // Format age string from timestamp
+  const formatAge = (timestamp) => {
+    if (!timestamp) return 'Recent';
+    const nowSec = Math.floor(Date.now() / 1000);
+    const postSec = timestamp > 1e11 ? Math.floor(timestamp / 1000) : Number(timestamp);
+    const diffSec = nowSec - postSec;
+    if (diffSec < 3600) return `${Math.max(1, Math.round(diffSec / 60))}m ago`;
+    if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
+    const days = Math.round(diffSec / 86400);
+    return `${days}d ago`;
+  };
+
+  // Workflow Tabs Configuration
+  const tabs = [
+    { id: 'high_priority', label: 'High-Priority Paid ($1,000+)', count: tabCounts.highPriority, color: 'text-emerald-400 border-emerald-500' },
+    { id: 'budget_unknown', label: 'Budget Unknown — Qualify', count: tabCounts.budgetUnknown, color: 'text-amber-400 border-amber-500' },
+    { id: 'agency', label: 'Agency Contracts', count: tabCounts.agency, color: 'text-purple-400 border-purple-500' },
+    { id: 'manual_review', label: 'Needs Manual Review', count: tabCounts.manualReview, color: 'text-sky-400 border-sky-500' },
+    { id: 'rejected', label: 'Rejected / Excluded', count: tabCounts.rejected, color: 'text-rose-400 border-rose-500' }
+  ];
+
   return (
-    <div className="space-y-6 h-[calc(100vh-7rem)] flex flex-col">
-      {/* Title & Stats */}
+    <div className="space-y-5 h-[calc(100vh-7rem)] flex flex-col">
+      {/* Title & Action Bar */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div>
-          <h2 className="text-2xl font-extrabold text-white">Freelance Opportunities</h2>
-          <p className="text-slate-400 text-xs mt-1">Review opportunities, customize proposals, and track client responses.</p>
+          <h2 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+            <span>Client Opportunities</span>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Verified 7-Day Window
+            </span>
+          </h2>
+          <p className="text-slate-400 text-xs mt-1">
+            Real clients & software agencies hiring freelance developers for paid projects worth $1,000+ USD.
+          </p>
         </div>
         <button
           onClick={handleClearLeads}
           disabled={clearLeadsMutation.isPending}
-          className="px-4 py-2 text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-500/30 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3.5 py-1.5 text-xs font-semibold text-rose-400 border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-500/30 rounded-xl transition-all disabled:opacity-50"
         >
           {clearLeadsMutation.isPending ? 'Clearing...' : 'Clear All Leads'}
         </button>
       </div>
 
+      {/* Workflow Tabs Navigation */}
+      <div className="flex items-center gap-2 border-b border-dark-700/60 pb-2 overflow-x-auto flex-shrink-0 scrollbar-none">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setActiveLeadId(null);
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap border ${
+                isActive 
+                  ? 'bg-dark-800 text-white shadow-sm border-brand-accent/50'
+                  : 'bg-dark-900/40 text-slate-400 border-transparent hover:text-slate-200 hover:bg-dark-800/60'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                isActive ? 'bg-brand-accent/20 text-brand-accent' : 'bg-dark-700 text-slate-400'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filters Bar */}
-      <div className="bg-dark-900/60 border border-dark-700/60 p-4 rounded-2xl flex flex-wrap items-center gap-4 flex-shrink-0">
+      <div className="bg-dark-900/60 border border-dark-700/60 p-3 rounded-2xl flex flex-wrap items-center gap-3 flex-shrink-0 text-xs">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[180px]">
           <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <FiSearch className="text-slate-500 w-4 h-4" />
+            <FiSearch className="text-slate-500 w-3.5 h-3.5" />
           </span>
           <input
             type="text"
-            placeholder="Filter by title, company..."
+            placeholder="Search by title, stack, deliverable..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full glass-input pl-9 text-xs py-2 placeholder-slate-500"
+            className="w-full glass-input pl-9 text-xs py-1.5 placeholder-slate-500 rounded-xl"
           />
         </div>
 
-        {/* Source */}
+        {/* Timeframe */}
+        <select
+          value={timeframeFilter}
+          onChange={(e) => setTimeframeFilter(e.target.value)}
+          className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium"
+        >
+          <option value="24h">Last 24 Hours</option>
+          <option value="3d">Last 3 Days (Recent)</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="14d">Last 14 Days (Extended)</option>
+          <option value="all">All Time</option>
+        </select>
+
+        {/* Subreddit / Community */}
         <select
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
-          className="glass-input text-xs py-2 cursor-pointer"
+          className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium text-slate-300"
         >
-          <option value="">All Sources</option>
-          <option value="reddit">Reddit</option>
-          <option value="Hacker News">Hacker News</option>
-          <option value="RemoteOK">RemoteOK</option>
-          <option value="Dev.to">Dev.to Jobs</option>
-          <option value="GitHub">GitHub Discussions</option>
-          <option value="Wellfound">Wellfound</option>
+          <option value="">All Reddit Groups</option>
+          <option value="forhire">r/forhire</option>
+          <option value="Hiring">r/Hiring</option>
+          <option value="jobbit">r/jobbit</option>
+          <option value="freelance_forhire">r/freelance_forhire</option>
+          <option value="AppDevelopers">r/AppDevelopers</option>
+          <option value="FlutterDev">r/FlutterDev</option>
+          <option value="reactnative">r/reactnative</option>
+          <option value="webdev">r/webdev</option>
+          <option value="nextjs">r/nextjs</option>
+          <option value="SaaS">r/SaaS</option>
+          <option value="startups">r/startups</option>
+          <option value="Entrepreneur">r/Entrepreneur</option>
         </select>
 
         {/* Technology */}
         <select
           value={techFilter}
           onChange={(e) => setTechFilter(e.target.value)}
-          className="glass-input text-xs py-2 cursor-pointer"
+          className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium"
         >
-          <option value="">All Technologies</option>
-          <option value="Flutter">Flutter</option>
+          <option value="">All Stacks</option>
+          <option value="Flutter">Flutter & Dart</option>
           <option value="React Native">React Native</option>
-          <option value="iOS">iOS</option>
-          <option value="Android">Android</option>
-          <option value="Firebase">Firebase</option>
-          <option value="Node">Node.js</option>
+          <option value="Next.js">React / Next.js</option>
+          <option value="Node">Node.js / Backend</option>
+          <option value="TypeScript">TypeScript</option>
+          <option value="Firebase">Firebase / Supabase</option>
+          <option value="API">API Integration / Stripe</option>
+          <option value="Python">Python / AI</option>
+          <option value="Automation">Automation / Scraping</option>
+        </select>
+
+        {/* Budget Status */}
+        <select
+          value={budgetFilter}
+          onChange={(e) => setBudgetFilter(e.target.value)}
+          className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium"
+        >
+          <option value="">All Budgets</option>
+          <option value="1000+">$1,000+ Target</option>
+          <option value="confirmed">Confirmed Stated Budget</option>
+          <option value="unknown">Budget Unknown (Qualify)</option>
+          <option value="below_1000">Under $1,000</option>
+        </select>
+
+        {/* Client Type */}
+        <select
+          value={clientTypeFilter}
+          onChange={(e) => setClientTypeFilter(e.target.value)}
+          className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium"
+        >
+          <option value="">All Client Types</option>
+          <option value="direct_client">Direct Client / Founder</option>
+          <option value="agency">Agency Subcontract</option>
         </select>
 
         {/* Urgency */}
         <select
           value={urgencyFilter}
           onChange={(e) => setUrgencyFilter(e.target.value)}
-          className="glass-input text-xs py-2 cursor-pointer"
+          className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium"
         >
           <option value="">All Urgency</option>
-          <option value="High">High</option>
+          <option value="High">High Urgency</option>
           <option value="Medium">Medium</option>
           <option value="Low">Low</option>
         </select>
 
-        {/* Budget */}
-        <select
-          value={minBudgetFilter}
-          onChange={(e) => setMinBudgetFilter(e.target.value)}
-          className="glass-input text-xs py-2 cursor-pointer"
-        >
-          <option value="0">Any Budget</option>
-          <option value="500">+$500</option>
-          <option value="1000">+$1,000</option>
-          <option value="2000">+$2,000</option>
-          <option value="5000">+$5,000</option>
-        </select>
-
-        {/* Status */}
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="glass-input text-xs py-2 cursor-pointer"
-        >
-          <option value="">All Statuses</option>
-          <option value="New">New</option>
-          <option value="Contacted">Contacted</option>
-          <option value="Interview">Interview</option>
-          <option value="Negotiating">Negotiating</option>
-          <option value="Won">Won</option>
-          <option value="Lost">Lost</option>
-        </select>
-
-        {/* Sort */}
+        {/* Sort By */}
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
-          className="glass-input text-xs py-2 cursor-pointer"
+          className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium"
         >
+          <option value="score">Highest Match Score</option>
           <option value="created_time">Newest Post</option>
           <option value="estimated_budget">Highest Budget</option>
-          <option value="score">Highest Match Score</option>
         </select>
-
-        {/* Community Discussions Toggle */}
-        <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-400 hover:text-white transition-colors pl-2 border-l border-dark-700/60">
-          <input
-            type="checkbox"
-            checked={showDiscussions}
-            onChange={(e) => setShowDiscussions(e.target.checked)}
-            className="rounded border-dark-600 bg-dark-800 text-purple-600 focus:ring-purple-500/20 focus:ring-offset-0 focus:ring-2 w-3.5 h-3.5 cursor-pointer"
-          />
-          <span>Show Discussions</span>
-        </label>
       </div>
 
       {/* Main Split Content Area */}
       <div className="flex-1 flex gap-6 overflow-hidden min-h-0">
-        {/* Left Side: Leads List */}
-        <div className="w-1/2 flex flex-col overflow-y-auto pr-2 space-y-3.5">
+        {/* Left Side: Qualified Leads List */}
+        <div className="w-1/2 flex flex-col overflow-y-auto pr-1.5 space-y-3">
           {listLoading ? (
             [...Array(4)].map((_, i) => (
-              <div key={i} className="h-28 bg-dark-800 rounded-2xl animate-pulse" />
+              <div key={i} className="h-32 bg-dark-800 rounded-2xl animate-pulse" />
             ))
           ) : leads.length === 0 ? (
             <div className="glass-panel p-12 rounded-2xl text-center space-y-3">
               <FiBriefcase className="w-10 h-10 text-slate-500 mx-auto" />
-              <p className="text-slate-400 text-sm font-semibold">No opportunities match the selected criteria.</p>
+              <p className="text-slate-300 text-sm font-bold">No opportunities in this category match your filters.</p>
+              <p className="text-slate-500 text-xs">Try switching tabs or resetting the filter criteria.</p>
               <button 
                 onClick={() => {
                   setSearchTerm('');
                   setSourceFilter('');
                   setTechFilter('');
                   setUrgencyFilter('');
-                  setMinBudgetFilter('0');
-                  setStatusFilter('');
+                  setTimeframeFilter('7d');
+                  setBudgetFilter('');
+                  setClientTypeFilter('');
                 }}
-                className="text-xs text-brand-accent hover:underline font-semibold"
+                className="text-xs text-brand-accent hover:underline font-semibold mt-2"
               >
-                Clear all filters
+                Reset filters
               </button>
             </div>
           ) : (
             leads.map((lead) => {
               const isActive = lead.id === activeLeadId;
-              let scoreColor = 'bg-brand-green/10 text-brand-green border-brand-green/20';
-              if (lead.score < 60) scoreColor = 'bg-brand-red/10 text-brand-red border-brand-red/20';
-              else if (lead.score < 80) scoreColor = 'bg-brand-yellow/10 text-brand-yellow border-brand-yellow/20';
+              
+              // Score color calculation
+              let scoreBadge = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+              if (lead.score < 40) scoreBadge = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+              else if (lead.score < 60) scoreBadge = 'bg-sky-500/10 text-sky-400 border-sky-500/20';
+              else if (lead.score < 75) scoreBadge = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+
+              // Budget label & badge styling
+              const maxBudget = lead.budget_max_usd || lead.budget_min_usd || lead.estimated_budget || 0;
+              let budgetDisplay = 'Budget Unknown (Qualify)';
+              let budgetBadge = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+
+              if (lead.budget_status === 'confirmed' || maxBudget >= 1000) {
+                budgetDisplay = `$${maxBudget.toLocaleString()} (Confirmed)`;
+                budgetBadge = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold';
+              } else if (maxBudget > 0 && maxBudget < 1000) {
+                budgetDisplay = `$${maxBudget.toLocaleString()} (< $1,000)`;
+                budgetBadge = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+              } else if (lead.payment_status === 'unpaid_or_equity') {
+                budgetDisplay = 'Unpaid / Equity Only';
+                budgetBadge = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+              }
 
               return (
                 <div
@@ -318,51 +426,75 @@ const Leads = () => {
                     }
                   `}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {lead.intent_category && (
-                          <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
-                            ['Hiring', 'Buying Services', 'Looking for Cofounder'].includes(lead.intent_category)
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                              : (lead.intent_category === 'Selling Services'
-                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                                  : 'bg-slate-800 text-slate-400 border-dark-600')
-                          }`}>
-                            {lead.intent_category}
-                          </span>
-                        )}
-                        {lead.opportunity_type && lead.opportunity_type !== 'Ignore' && (
-                          <span className="text-[8px] font-semibold bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/20">
-                            {lead.opportunity_type}
-                          </span>
-                        )}
-                        {lead.client_type && (
-                          <span className="text-[8px] font-semibold bg-dark-800 text-slate-400 px-1.5 py-0.5 rounded border border-dark-700/60">
-                            {lead.client_type}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className={`text-sm font-extrabold font-sans line-clamp-1 transition-all ${isActive ? 'text-white' : 'text-slate-200'}`}>
-                        {lead.title}
-                      </h3>
+                  {/* Top Bar: Badges & Score */}
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+                      {/* Source */}
+                      <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-dark-800 text-slate-300 border border-dark-700">
+                        {lead.source}
+                      </span>
+
+                      {/* Engagement Type */}
+                      <span className="text-[9px] font-semibold px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                        {lead.opportunity_type === 'agency_subcontract' ? 'Agency Contract' : (lead.opportunity_type === 'paid_technical_task' ? 'Technical Task' : 'Direct Freelance')}
+                      </span>
+
+                      {/* Budget Badge */}
+                      <span className={`text-[9px] px-2 py-0.5 rounded-lg border ${budgetBadge}`}>
+                        {budgetDisplay}
+                      </span>
+
+                      {/* Age */}
+                      <span className="text-[9px] font-semibold px-2 py-0.5 rounded-lg bg-dark-800 text-slate-400 flex items-center gap-1">
+                        <FiClock className="w-2.5 h-2.5" />
+                        {formatAge(lead.created_time)}
+                      </span>
                     </div>
-                    <span className={`text-[9px] px-2 py-0.5 rounded-full border shrink-0 font-bold ${scoreColor}`}>
-                      Match {lead.score}%
+
+                    {/* Score */}
+                    <span className={`text-[10px] px-2.5 py-0.5 rounded-full border shrink-0 font-extrabold ${scoreBadge}`}>
+                      Score {lead.score}
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-400 line-clamp-2">{lead.description}</p>
+                  {/* Title */}
+                  <div>
+                    <h3 className={`text-sm font-extrabold font-sans line-clamp-2 leading-snug transition-all ${isActive ? 'text-white' : 'text-slate-100'}`}>
+                      {lead.title}
+                    </h3>
+                  </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold border-t border-dark-700/40 pt-2.5 mt-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-brand-accent uppercase font-bold">{lead.source}</span>
-                      <span>{lead.company || 'Client'}</span>
+                  {/* Short AI Qualification Reason */}
+                  {lead.confidence_reason && (
+                    <div className="bg-dark-800/60 p-2 rounded-xl text-[11px] text-slate-300 border border-dark-700/40 flex items-start gap-1.5">
+                      <FiCheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <span className="line-clamp-2">{lead.confidence_reason}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-slate-300 font-extrabold">${lead.estimated_budget ? lead.estimated_budget.toLocaleString() : 'Flexible'}</span>
-                      <span className="bg-dark-800 px-2 py-0.5 rounded-full text-slate-400">{lead.status}</span>
+                  )}
+
+                  {/* Exclusion reason if rejected */}
+                  {lead.exclusion_reason && (
+                    <div className="bg-rose-500/5 p-2 rounded-xl text-[11px] text-rose-300 border border-rose-500/20 flex items-start gap-1.5">
+                      <FiAlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                      <span className="line-clamp-2">{lead.exclusion_reason}</span>
                     </div>
+                  )}
+
+                  {/* Bottom Meta & Action Recommendation */}
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold border-t border-dark-700/40 pt-2.5 mt-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400 font-bold">{lead.author ? `u/${lead.author}` : 'Client'}</span>
+                      {lead.technology && lead.technology !== 'None' && (
+                        <span className="text-slate-500 font-normal truncate max-w-[180px]">
+                          • {lead.technology}
+                        </span>
+                      )}
+                    </div>
+                    {lead.recommended_action && (
+                      <span className="text-[10px] text-brand-accent font-bold truncate max-w-[200px]">
+                        👉 {lead.recommended_action}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -370,12 +502,12 @@ const Leads = () => {
           )}
         </div>
 
-        {/* Right Side: Lead details & proposals */}
+        {/* Right Side: Lead details & tailored proposal generator */}
         <div className="w-1/2 bg-dark-900/45 border border-dark-700/60 rounded-2xl flex flex-col overflow-y-auto">
           {activeLeadId === null ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-8 text-center space-y-2">
-              <FiFileText className="w-10 h-10" />
-              <p className="text-sm font-semibold">Select a lead to see detailed AI evaluation and generated proposals.</p>
+              <FiFileText className="w-10 h-10 text-slate-600" />
+              <p className="text-sm font-semibold text-slate-400">Select an opportunity to view AI qualification and custom outreach proposals.</p>
             </div>
           ) : detailLoading ? (
             <div className="p-8 space-y-6 flex-1">
@@ -389,39 +521,43 @@ const Leads = () => {
               {/* Header */}
               <div className="space-y-3.5 border-b border-dark-700/60 pb-5">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-semibold bg-dark-800 px-2.5 py-1 rounded-lg border border-dark-700">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-slate-300 font-bold bg-dark-800 px-2.5 py-1 rounded-lg border border-dark-700">
                       {activeLead.source}
                     </span>
-                    <span className="text-xs text-slate-400 font-semibold bg-dark-800 px-2.5 py-1 rounded-lg border border-dark-700">
-                      Score: {activeLead.score}
+                    <span className="text-xs text-emerald-400 font-extrabold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                      Match Score: {activeLead.score}/100
+                    </span>
+                    <span className="text-xs text-slate-400 bg-dark-800 px-2.5 py-1 rounded-lg border border-dark-700">
+                      Published: {formatAge(activeLead.created_time)}
                     </span>
                   </div>
                   <button 
                     onClick={() => toggleSaveMutation.mutate({ id: activeLead.id, isSaved: activeLead.is_saved })}
                     className={`p-2 rounded-xl border transition-all ${activeLead.is_saved ? 'bg-amber-400/10 border-amber-400/30 text-amber-400' : 'border-dark-700 hover:bg-dark-800 text-slate-400'}`}
+                    title="Bookmark lead"
                   >
                     <FiBookmark className={`w-4.5 h-4.5 ${activeLead.is_saved ? 'fill-current' : ''}`} />
                   </button>
                 </div>
+
                 <div>
                   <h3 className="text-lg font-extrabold text-white leading-snug">{activeLead.title}</h3>
                   <div className="flex items-center gap-4 text-xs text-slate-400 mt-2 font-medium">
-                    <span>Company: <strong className="text-slate-200">{activeLead.company}</strong></span>
-                    <span>Author: <strong className="text-slate-200">{activeLead.author}</strong></span>
-                    <span>Time: <strong className="text-slate-200">{new Date(activeLead.created_time * 1000).toLocaleDateString()}</strong></span>
+                    <span>Author: <strong className="text-slate-200">{activeLead.author ? `u/${activeLead.author}` : 'Anonymous'}</strong></span>
+                    <span>Required Tech: <strong className="text-brand-accent">{activeLead.technology || 'Full-Stack'}</strong></span>
                   </div>
                 </div>
               </div>
 
-              {/* Status Tracker */}
+              {/* Status Tracker & Direct Link */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5">Lead Status</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5">Outreach Status</label>
                   <select 
                     value={activeLead.status} 
                     onChange={(e) => handleStatusChange(e.target.value)}
-                    className="glass-input w-full text-xs cursor-pointer py-1.5"
+                    className="glass-input w-full text-xs cursor-pointer py-1.5 rounded-xl font-semibold"
                   >
                     <option value="New">New</option>
                     <option value="Contacted">Contacted</option>
@@ -432,181 +568,157 @@ const Leads = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5">Action</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5">Original Post</label>
                   <a 
                     href={activeLead.url} 
                     target="_blank" 
                     rel="noreferrer"
-                    className="flex items-center justify-center gap-2 bg-dark-800 hover:bg-dark-700 border border-dark-700 text-xs font-semibold px-4 py-1.5 rounded-lg text-white transition-all h-[34px]"
+                    className="flex items-center justify-center gap-2 bg-brand-accent hover:bg-violet-600 text-xs font-bold px-4 py-1.5 rounded-xl text-white transition-all h-[34px] shadow-sm"
                   >
-                    <span>Open Opportunity</span>
+                    <span>Open on Reddit</span>
                     <FiExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>
               </div>
 
-              {/* Intent & Confidence Assessment */}
-              <div className="grid grid-cols-2 gap-4 bg-dark-900/60 p-4 rounded-xl border border-dark-700/60">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Hiring Intent Score</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-extrabold text-white">{activeLead.hiring_intent_score ?? activeLead.score}%</span>
-                    {activeLead.intent_category && (
-                      <span className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase ${
-                        ['Hiring', 'Buying Services', 'Looking for Cofounder'].includes(activeLead.intent_category)
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-slate-800 text-slate-400 border-dark-600'
-                      }`}>
-                        {activeLead.intent_category}
-                      </span>
-                    )}
+              {/* AI Semantic Intelligence Breakdown */}
+              <div className="bg-dark-900/60 p-4 rounded-xl border border-dark-700/60 space-y-3">
+                <div className="flex items-center justify-between border-b border-dark-700/40 pb-2">
+                  <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                    <FiShield className="text-emerald-400" /> AI Qualification Breakdown
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-400">
+                    Budget: <strong className="text-emerald-400">
+                      {(activeLead.budget_max_usd || activeLead.estimated_budget) ? `$${(activeLead.budget_max_usd || activeLead.estimated_budget).toLocaleString()} USD` : 'Undisclosed'}
+                    </strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                  <div className="bg-dark-800/70 p-2 rounded-lg border border-dark-700/50">
+                    <div className="text-slate-500 uppercase font-bold">Scope Clarity</div>
+                    <div className="text-slate-200 font-extrabold capitalize mt-0.5">{activeLead.scope_clarity || 'Medium'}</div>
+                  </div>
+                  <div className="bg-dark-800/70 p-2 rounded-lg border border-dark-700/50">
+                    <div className="text-slate-500 uppercase font-bold">Urgency</div>
+                    <div className="text-slate-200 font-extrabold capitalize mt-0.5">{activeLead.urgency_level || 'Medium'}</div>
+                  </div>
+                  <div className="bg-dark-800/70 p-2 rounded-lg border border-dark-700/50">
+                    <div className="text-slate-500 uppercase font-bold">Payment Status</div>
+                    <div className="text-slate-200 font-extrabold capitalize mt-0.5">{activeLead.payment_status || 'Budgeted'}</div>
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Classification Confidence</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-extrabold text-white">{activeLead.confidence_score ?? 100}%</span>
-                    <span className="text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase bg-dark-800 text-slate-400 border-dark-700">
-                      {activeLead.client_type || 'Client'}
-                    </span>
-                  </div>
-                </div>
-                {activeLead.opportunity_type && (
-                  <div className="col-span-2 text-[11px] text-slate-400">
-                    <strong className="text-slate-350 font-bold block mb-0.5">Opportunity Type:</strong>
-                    <span className="text-white bg-dark-800 border border-dark-700 px-2 py-0.5 rounded text-[10px] font-semibold">{activeLead.opportunity_type}</span>
-                  </div>
-                )}
+
                 {activeLead.confidence_reason && (
-                  <div className="col-span-2 text-[11px] text-slate-400 leading-relaxed border-t border-dark-700/40 pt-2.5 mt-1">
-                    <strong className="text-slate-350 font-bold block mb-0.5">Classification Logic:</strong>
+                  <div className="text-xs text-slate-300 leading-relaxed pt-1">
+                    <strong className="text-slate-400 font-semibold block text-[10px] uppercase mb-0.5">Why this qualifies:</strong>
                     {activeLead.confidence_reason}
                   </div>
                 )}
+
+                {activeLead.recommended_action && (
+                  <div className="bg-brand-accent/10 border border-brand-accent/20 p-2.5 rounded-lg text-xs text-violet-300 leading-relaxed">
+                    <strong className="text-violet-400 font-extrabold block text-[10px] uppercase mb-0.5">Recommended Action:</strong>
+                    {activeLead.recommended_action}
+                  </div>
+                )}
+
+                {activeLead.exclusion_reason && (
+                  <div className="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg text-xs text-rose-300 leading-relaxed">
+                    <strong className="text-rose-400 font-extrabold block text-[10px] uppercase mb-0.5">Disqualification Reason:</strong>
+                    {activeLead.exclusion_reason}
+                  </div>
+                )}
               </div>
 
-              {/* AI Details Heuristics */}
-              <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-700/60 space-y-3">
-                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-accent animate-pulse" />
-                  AI Summary & Analysis
-                </h4>
-                
-                <p className="text-xs text-slate-300 leading-relaxed bg-dark-950/60 p-3 rounded-lg border border-dark-800">{activeLead.ai_summary}</p>
-                
-                <div className="grid grid-cols-2 gap-3 text-xs pt-1.5">
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-semibold uppercase">Suggested Tech Stack</span>
-                    <span className="text-slate-200 font-bold">{activeLead.ai_suggested_tech}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-semibold uppercase">Estimated Effort</span>
-                    <span className="text-slate-200 font-bold">{activeLead.ai_estimated_hours} hours ({activeLead.complexity})</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400 block text-[10px] font-semibold uppercase">Detected Risks</span>
-                    <span className="text-brand-red font-medium text-xs leading-relaxed">{activeLead.ai_risks}</span>
+              {/* Full Description / Post Content */}
+              {activeLead.description && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block">Posting Text</label>
+                  <div className="bg-dark-900/60 p-3.5 rounded-xl border border-dark-700/60 text-xs text-slate-300 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-line font-mono text-[11px]">
+                    {activeLead.description}
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Original Posting Description */}
-              <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-700/60 space-y-3">
-                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Original Posting Description
-                </h4>
-                <div className="text-xs text-slate-400 leading-relaxed bg-dark-950/60 p-3 rounded-lg border border-dark-800 max-h-48 overflow-y-auto whitespace-pre-wrap">
-                  {activeLead.description}
-                </div>
-              </div>
-
-              {/* Extracted Links */}
-              {(() => {
-                const urlRegex = /(https?:\/\/[^\s\)\],]+)/g;
-                const matches = activeLead.description ? activeLead.description.match(urlRegex) : null;
-                const extractedUrls = matches ? [...new Set(matches)] : [];
-                
-                if (extractedUrls.length === 0) return null;
-                
-                return (
-                  <div className="bg-dark-900/50 p-4 rounded-xl border border-dark-700/60 space-y-2">
-                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                      Extracted Links & Contacts
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {extractedUrls.map((url, idx) => (
-                        <a
-                          key={idx}
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-brand-accent hover:underline flex items-center gap-1 bg-dark-950/60 px-3 py-1.5 rounded-lg border border-dark-800"
-                        >
-                          <span className="truncate max-w-[200px]">{url}</span>
-                          <FiExternalLink className="w-3 h-3 shrink-0" />
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Proposal Generator Section */}
-              <div className="border-t border-dark-700/60 pt-5 space-y-4">
+              {/* Tailored Proposal Generator */}
+              <div className="space-y-3 pt-1 border-t border-dark-700/60">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-extrabold text-slate-300 uppercase tracking-wider">AI Proposal Drafts</h4>
-                  <div className="flex bg-dark-950 rounded-lg p-0.5 border border-dark-800">
-                    {['short', 'medium', 'long'].map((tab) => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveProposalTab(tab)}
-                        className={`text-[10px] font-bold px-3 py-1 rounded-md uppercase transition-all
-                          ${activeProposalTab === tab 
-                            ? 'bg-brand-accent text-white' 
-                            : 'text-slate-500 hover:text-slate-300'
-                          }
-                        `}
-                      >
-                        {tab}
-                      </button>
-                    ))}
+                  <label className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                    <FiZap className="text-amber-400" /> Tailored Outreach Pitch
+                  </label>
+                  <div className="flex items-center gap-1 bg-dark-800 p-0.5 rounded-lg border border-dark-700">
+                    <button
+                      onClick={() => setActiveProposalTab('short')}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                        activeProposalTab === 'short' ? 'bg-brand-accent text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Short
+                    </button>
+                    <button
+                      onClick={() => setActiveProposalTab('medium')}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                        activeProposalTab === 'medium' ? 'bg-brand-accent text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Medium
+                    </button>
+                    <button
+                      onClick={() => setActiveProposalTab('long')}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                        activeProposalTab === 'long' ? 'bg-brand-accent text-white' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Detailed
+                    </button>
                   </div>
                 </div>
 
                 <div className="relative">
                   <textarea
                     readOnly
-                    value={proposals ? proposals[activeProposalTab] : ''}
-                    className="w-full bg-dark-950/80 border border-dark-800 text-xs text-slate-300 p-4 rounded-xl font-mono h-48 focus:outline-none resize-none leading-relaxed"
+                    rows={8}
+                    value={proposals?.[activeProposalTab] || ''}
+                    className="w-full bg-dark-950/80 border border-dark-700/80 rounded-xl p-3 text-xs text-slate-300 font-mono leading-relaxed resize-none focus:outline-none"
                   />
                   <button
-                    onClick={() => handleCopyProposal(proposals ? proposals[activeProposalTab] : '')}
-                    className="absolute top-3 right-3 p-2 bg-dark-800 hover:bg-brand-accent hover:text-white rounded-lg border border-dark-700 text-slate-400 transition-all"
-                    title="Copy proposal"
+                    onClick={() => handleCopyProposal(proposals?.[activeProposalTab] || '')}
+                    className="absolute top-2.5 right-2.5 flex items-center gap-1.5 bg-dark-800/90 hover:bg-dark-700 border border-dark-600 text-slate-200 px-2.5 py-1 rounded-lg text-xs font-semibold shadow-md transition-all"
                   >
-                    {copied ? <FiCheck className="w-3.5 h-3.5 text-brand-green" /> : <FiCopy className="w-3.5 h-3.5" />}
+                    {copied ? (
+                      <>
+                        <FiCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <FiCopy className="w-3.5 h-3.5" />
+                        <span>Copy Proposal</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
 
-              {/* Developer Custom Notes */}
-              <div className="border-t border-dark-700/60 pt-5 space-y-3">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Custom Opportunity Notes</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Enter custom notes or interview feedback..."
-                    value={notesText}
-                    onChange={(e) => setNotesText(e.target.value)}
-                    className="flex-1 glass-input text-xs py-1.5"
-                  />
-                  <button 
+              {/* Private Notes */}
+              <div className="space-y-2 pt-2 border-t border-dark-700/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Private Notes</label>
+                  <button
                     onClick={handleSaveNotes}
-                    className="bg-dark-800 hover:bg-dark-700 border border-dark-700 text-white font-semibold text-xs px-4 rounded-lg active:scale-95 transition-all"
+                    className="text-xs text-brand-accent font-bold hover:underline"
                   >
-                    Save Note
+                    Save Notes
                   </button>
                 </div>
+                <textarea
+                  rows={2}
+                  placeholder="Record client responses, agreed rate, or follow-up dates..."
+                  value={notesText}
+                  onChange={(e) => setNotesText(e.target.value)}
+                  className="w-full glass-input text-xs p-2.5 rounded-xl placeholder-slate-600"
+                />
               </div>
             </div>
           ) : null}
