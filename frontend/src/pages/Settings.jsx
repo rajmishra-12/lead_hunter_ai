@@ -103,18 +103,18 @@ const Settings = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                <span>1. Active Platform Source: Reddit (205 Communities)</span>
+                <span>1. Active Platform Source: Reddit (325+ Communities)</span>
               </h3>
-              <p className="text-xs text-slate-400 mt-1">LeadHunter AI is dedicated exclusively to Reddit, scanning 205 active gig, startup, mobile, web, automation, AI, and developer communities.</p>
+              <p className="text-xs text-slate-400 mt-1">LeadHunter AI is dedicated exclusively to Reddit, scanning 325+ active gig boards, startup hubs, founder groups, mobile, web, automation, AI, and developer communities.</p>
             </div>
             <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Reddit Active (205 Subreddits)
+              Reddit Active (325+ Subreddits)
             </span>
           </div>
 
           <div className="p-4 bg-dark-950/60 border border-dark-800 rounded-xl space-y-2">
-            <p className="text-[11px] font-semibold text-slate-300">Monitored Reddit Hubs (205 Active Communities):</p>
+            <p className="text-[11px] font-semibold text-slate-300">Monitored Reddit Hubs (325+ Active Developer & Startup Communities):</p>
             <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
               {[
                 'r/forhire', 'r/freelance_forhire', 'r/jobbit', 'r/Hiring', 'r/remotework', 'r/RemoteJobs', 'r/freelance', 'r/Freelancers', 'r/DoneDirtCheap', 'r/slavelabour',

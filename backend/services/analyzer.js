@@ -13,18 +13,25 @@ export function analyzeLead(title, description = '') {
   const techMatches = [];
   if (text.includes('flutter')) techMatches.push('Flutter');
   if (text.includes('react native') || text.includes('reactnative')) techMatches.push('React Native');
+  else if (text.includes('react')) techMatches.push('React');
+  if (text.includes('next.js') || text.includes('nextjs')) techMatches.push('Next.js');
+  if (text.includes('node') || text.includes('express')) techMatches.push('Node.js');
+  if (text.includes('typescript')) techMatches.push('TypeScript');
+  if (text.includes('python') || text.includes('django') || text.includes('fastapi')) techMatches.push('Python');
+  if (text.includes('playwright') || text.includes('puppeteer')) techMatches.push('Playwright');
+  if (text.includes('automation') || text.includes('scraping') || text.includes('scraper')) techMatches.push('Automation/Scraping');
   if (text.includes('ios') || text.includes('swift') || text.includes('xcode') || text.includes('swiftui')) techMatches.push('iOS');
-  if (text.includes('android') || text.includes('kotlin') || text.includes('java ')) techMatches.push('Android');
+  if (text.includes('android') || text.includes('kotlin')) techMatches.push('Android');
   if (text.includes('firebase')) techMatches.push('Firebase');
   if (text.includes('supabase')) techMatches.push('Supabase');
-  if (text.includes('node') || text.includes('express')) techMatches.push('Node.js');
-  if (text.includes('next.js') || text.includes('nextjs')) techMatches.push('Next.js');
   if (text.includes('stripe') || text.includes('payment gateway')) techMatches.push('Stripe');
-  if (text.includes('openai') || text.includes('chatgpt') || text.includes('gpt') || text.includes('llm') || text.includes('gemini')) techMatches.push('AI/OpenAI');
-  if (text.includes('google maps') || text.includes('maps ') || text.includes('gps')) techMatches.push('Google Maps');
+  if (text.includes('openai') || text.includes('chatgpt') || text.includes('gpt') || text.includes('llm') || text.includes(' ai ')) techMatches.push('AI/LLM');
+  if (text.includes('api ') || text.includes('apis') || text.includes('rest api')) techMatches.push('APIs');
   if (text.includes('graphql')) techMatches.push('GraphQL');
   if (text.includes('mongodb') || text.includes('mongo')) techMatches.push('MongoDB');
   if (text.includes('postgresql') || text.includes('postgres')) techMatches.push('PostgreSQL');
+  if (text.includes('mobile app') || text.includes('mobile')) techMatches.push('Mobile App');
+  if (text.includes('web app') || text.includes('website') || text.includes('web dev')) techMatches.push('Web Development');
 
   const uniqueTech = [...new Set(techMatches)];
   const extracted_technologies = uniqueTech.join(', ') || 'General';
@@ -167,48 +174,41 @@ export function analyzeLead(title, description = '') {
   let is_potential_client = 1; // 1 = YES, 0 = NO
   let confidenceReasons = [];
 
+  const devRegex = /\b(developer|dev|programmer|engineer|coder|fullstack|full-stack|frontend|front-end|backend|back-end|software|web|website|web app|mobile app|mobile|app|ios|android|flutter|react|react native|next\.js|nextjs|node\.js|nodejs|typescript|javascript|python|django|fastapi|api|scraping|scraper|bot|automation|firebase|supabase|stripe|mvp|saas|playwright|puppeteer)\b/i;
+  const nonDevRegex = /\b(hvac|machinery|marine|mechanical|novel cover|book cover|illustration|illustrator|voice actor|audiobook|writer|copywriter|sales rep|account executive|real estate|cruise|ugc creator|video review|cad engineer)\b/i;
+  const clientRegex = /\b(hiring|looking for|need|needed|wanted|paying|paid|hire|want to build|looking to build|contract|freelance|budget)\b/i;
+  const sellerRegex = /\b(for hire|hire me|available for|my portfolio|offering my|seeking job|seeking role|seeking junior|open to work|open for work)\b/i;
+  const showcaseRegex = /\b(i built|i created|i published|showcase|check out my|what do you think|how did you|i got tired)\b/i;
+
   // Rejection rules first
   if (client_type === 'Freelancer' && intent_category === 'Selling Services') {
     is_potential_client = 0;
     confidenceReasons.push('Poster is a Freelancer selling services');
   }
-  if (titleLower.startsWith('[for hire]') || titleLower.startsWith('for hire')) {
+  if (titleLower.startsWith('[for hire]') || titleLower.startsWith('for hire') || sellerRegex.test(titleLower)) {
     is_potential_client = 0;
-    confidenceReasons.push('Title starts with [FOR HIRE]');
+    confidenceReasons.push('Title matches freelancer seller keywords');
   }
-  
-  const matchesCompetitorKeywords = 
-    titleLower.includes('hire me') ||
-    titleLower.includes('available for work') ||
-    titleLower.includes('looking for work') ||
-    titleLower.includes('freelancer') ||
-    titleLower.includes('portfolio') ||
-    titleLower.includes('my services');
-
-  if (matchesCompetitorKeywords) {
+  if (nonDevRegex.test(titleLower)) {
     is_potential_client = 0;
-    confidenceReasons.push('Title contains freelancer advertising keywords');
+    confidenceReasons.push('Title indicates non-software role');
+  }
+  if (showcaseRegex.test(titleLower)) {
+    is_potential_client = 0;
+    confidenceReasons.push('Community showcase or self-promotion post');
   }
 
   // Client validation checks
   if (is_potential_client === 1) {
-    const matchesClientKeywords = 
-      titleLower.includes('looking for developer') ||
-      titleLower.includes('need flutter developer') ||
-      titleLower.includes('hiring') ||
-      titleLower.includes('need mobile app') ||
-      titleLower.includes('need react native developer') ||
-      titleLower.includes('budget') ||
-      titleLower.includes('paid') ||
-      titleLower.includes('contract');
+    const isDev = devRegex.test(text);
+    const hasClientIntent = clientRegex.test(titleLower) || clientRegex.test(text.substring(0, 300));
 
-    if (matchesClientKeywords) {
+    if (isDev && hasClientIntent) {
       is_potential_client = 1;
-      confidenceReasons.push('Title matches buyer intent keywords');
-    } else if (intent_category === 'Discussion' || intent_category === 'Question' || intent_category === 'Tutorial' || intent_category === 'Showcase') {
-      // General non-business posts default to NO
+      confidenceReasons.push('Matches verified developer buyer intent');
+    } else {
       is_potential_client = 0;
-      confidenceReasons.push('General community discussion / question');
+      confidenceReasons.push('Lacks verified developer hiring requirement');
     }
   }
 

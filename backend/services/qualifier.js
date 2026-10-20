@@ -88,7 +88,14 @@ export function preFilterCandidate(post) {
     'voice actor',
     'warehouse',
     'delivery driver',
-    'retail associate'
+    'retail associate',
+    'cruise ship',
+    'machinery engineer',
+    'marine electronics',
+    'mechanical engineer',
+    'ugc creator',
+    'review videos',
+    'cad engineer'
   ];
 
   for (const kw of unrelatedJobKeywords) {

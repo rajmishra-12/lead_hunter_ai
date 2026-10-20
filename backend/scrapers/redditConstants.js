@@ -1,11 +1,11 @@
 /**
  * Subreddit targets and keyword configurations for Reddit lead discovery.
  * Prioritizes high-intent client hiring subreddits, founder communities, and problem-oriented phrases.
- * Curates 205 active communities across mobile, web, backend, automation, and AI.
+ * Curates 325+ active communities across mobile, web, backend, automation, startups, and AI.
  */
 
 export const SUBREDDITS = [
-  // --- 1. General Freelance & Tech Hiring Boards (32) ---
+  // --- 1. General Freelance & Tech Hiring Boards (38) ---
   'forhire',
   'freelance_forhire',
   'jobbit',
@@ -31,15 +31,21 @@ export const SUBREDDITS = [
   'GigEconomy',
   'Bounties',
   'bounty_hunters',
-  'freelancedevelopers',
-  'ContractDevs',
-  'hireaprogrammer',
-  'WebDevJobs',
-  'AppJobs',
-  'CryptoJobsList',
-  'techcareergrowth',
+  'freelance_projects',
+  'forhire_freelance',
+  'GigEconomyJobs',
+  'FreelanceWriters',
+  'TechContractors',
+  'RemoteWorkSource',
+  'RemoteTech',
+  'RemoteDev',
+  'EuropeJobs',
+  'freelance_tech',
+  'techgigs',
+  'freelancing',
+  'RemoteJobSeekers',
 
-  // --- 2. Startup, Founder, IndieHackers & Micro-SaaS Hubs (50) ---
+  // --- 2. Startup, Founder, SaaS, Indie Hackers & E-commerce (64) ---
   'Entrepreneur',
   'startups',
   'SideProject',
@@ -61,6 +67,8 @@ export const SUBREDDITS = [
   'Startup_Ideas',
   'alphaandbetausers',
   'ladybusiness',
+  'FulfillmentByAmazon',
+  'AmazonSeller',
   'ShopifyDev',
   'WooCommerce',
   'BigCommerce',
@@ -73,25 +81,37 @@ export const SUBREDDITS = [
   'AppEngine',
   'LaunchThis',
   'IMadeThis',
-  'techstartups',
-  'ycombinator',
+  'startup',
+  'Founders',
+  'TechFounders',
+  'EarlyStage',
+  'venturecapital',
+  'angelinvestors',
   'buildinpublic',
-  'juststart',
-  'earlystage',
-  'founders',
-  'BootstrappedSaaS',
-  'saasbuilders',
-  'ProductHunters',
   'ProductHunt',
+  'IndieDev',
+  'SoloDevelopment',
   'Solopreneur',
-  'indiebiz',
-  'nocode',
-  'Bubbleio',
-  'flutterflow',
-  'nocoders',
-  'startups_growth',
+  'micro_saas',
+  'SaaSMarketing',
+  'SaaS_Growth',
+  'BootstrappedSaaS',
+  'B2B',
+  'B2BSaaS',
+  'technopreneur',
+  'onlinebusiness',
+  'SideHustle',
+  'sidehustleideas',
+  'PassiveIncome',
+  'ecommerce_business',
+  'ShopifyEcommerce',
+  'StartupGrowth',
+  'YCombinator',
+  'ProductManagement',
+  'Crowdfunding',
+  'Crowdfund',
 
-  // --- 3. Mobile App Development & Cross-Platform (32) ---
+  // --- 3. Mobile App Development & Cross-Platform (39) ---
   'AppDevelopers',
   'FlutterDev',
   'reactnative',
@@ -117,15 +137,22 @@ export const SUBREDDITS = [
   'AppIdeas',
   'AppBusiness',
   'MobileDevs',
+  'Android_Dev',
+  'flutter_dev',
   'react_native',
-  'flutter_community',
-  'ReactNativeCommunity',
-  'iOS_Developer',
-  'androidapps',
-  'mobileprogramming',
-  'CrossPlatform',
+  'iOS_Development',
+  'SwiftDevelopers',
+  'KotlinDevelopers',
+  'MobileAppMarketing',
+  'AppDesigning',
+  'HybridAppDev',
+  'CrossPlatformDev',
+  'MobileDesign',
+  'mobileui',
+  'AppleWatchDev',
+  'WearOS',
 
-  // --- 4. Web, Frontend & Full-Stack Modern Communities (42) ---
+  // --- 4. Web, Frontend & Modern Full-Stack (54) ---
   'webdev',
   'WebDeveloperJobs',
   'reactjs',
@@ -161,15 +188,27 @@ export const SUBREDDITS = [
   'remixrun',
   'vite',
   'webpack',
-  'TailwindCSS',
-  'react',
-  'svelte',
-  'webdevelopment',
-  'fullstackdeveloper',
-  'prisma',
-  'trpc',
+  'frontend_dev',
+  'javascript_dev',
+  'FullStackDev',
+  'coding',
+  'programming',
+  'SoftwareEngineering',
+  'SoftwareDevelopment',
+  'webdev_tutorials',
+  'learnjavascript',
+  'NextJS_Dev',
+  'TypeScript_Dev',
+  'ReactDevelopers',
+  'FrontendEngineering',
+  'ModernFrontend',
+  'Tailwind_CSS',
+  'CSS_Design',
+  'WebDesignCritique',
+  'JamstackDev',
+  'AstroDev',
 
-  // --- 5. Backend, APIs, Python, Cloud & Database (42) ---
+  // --- 5. Backend, APIs, Python & Cloud (49) ---
   'node',
   'backend',
   'Python',
@@ -205,15 +244,22 @@ export const SUBREDDITS = [
   'kubernetes',
   'serverless',
   'microservices',
-  'Automate',
+  'BackendDevelopment',
+  'NodeJS_Hiring',
   'PythonJobs',
-  'golangjobs',
-  'rust_programming',
-  'api',
-  'Postman',
-  'CloudComputing',
+  'django_jobs',
+  'FastAPI_Dev',
+  'GoLang_Dev',
+  'Rust_Dev',
+  'DevOps_Jobs',
+  'CloudEngineering',
+  'AWS_Cloud',
+  'Firebase_Dev',
+  'Supabase_Dev',
+  'GraphQL_Dev',
+  'API_Development',
 
-  // --- 6. Automation, Workflows, Scraping & Tools (18) ---
+  // --- 6. Automation, Scraping, Workflows & No-Code Bridges (24) ---
   'n8n',
   'zapier',
   'make',
@@ -229,11 +275,17 @@ export const SUBREDDITS = [
   'excel',
   'PowerBI',
   'tableau',
-  'browserautomation',
-  'workflowautomation',
-  'GoogleAppsScript',
+  'WebAutomation',
+  'Playwright_Dev',
+  'Puppeteer_Dev',
+  'Selenium_Dev',
+  'n8n_io',
+  'ZapierAutomation',
+  'MakeAutomation',
+  'AirtableAutomation',
+  'DataPipelines',
 
-  // --- 7. AI, LLM Integrations & Agents (26) ---
+  // --- 7. AI, LLM, Vision & Machine Learning Applications (32) ---
   'OpenAI',
   'ChatGPTCoding',
   'LangChain',
@@ -254,14 +306,20 @@ export const SUBREDDITS = [
   'AICoding',
   'midjourney',
   'VectorDatabases',
-  'AutoGPT',
-  'CrewAI',
-  'Anthropic',
+  'LLMDevs',
+  'AIEngineering',
+  'GenerativeAI',
+  'AgenticAI',
+  'LangChainAI',
   'OpenAI_Developers',
+  'Anthropic',
+  'Groq',
+  'ChromaDB',
+  'Pinecone',
   'AIStartups',
-  'Chatbots',
+  'MachineLearningJobs',
 
-  // --- 8. FinTech, Web3 & Payment Integrations (18) ---
+  // --- 8. Crypto, Web3, FinTech & Payment Integrations (25) ---
   'ethdev',
   'solidity',
   'Solana',
@@ -277,9 +335,16 @@ export const SUBREDDITS = [
   'NFT',
   'TradingView',
   'InteractiveBrokers',
-  'StripeDev',
-  'PaymentGateways',
-  'ethereum'
+  'Web3Devs',
+  'Solidity_Dev',
+  'SmartContractDevs',
+  'CryptoDevs',
+  'Stripe_Developers',
+  'AlgorithmicTrading',
+  'CryptoTechnology',
+  'Cardano',
+  'Ethereum',
+  'Polygon'
 ];
 
 export const KEYWORDS = [
@@ -353,16 +418,25 @@ export const KEYWORDS = [
   'paid gig',
   'cofounder',
   'co-founder',
-  'hiring'
+  'need a developer',
+  'looking for developer',
+  'hire developer',
+  'hiring developer',
+  'hire programmer',
+  'hire engineer',
+  'build my app',
+  'build my website',
+  'build an mvp'
 ];
 
 /**
  * Intelligent filter to qualify if a Reddit post is a candidate client/buyer lead.
- * Excludes freelancer self-advertisements, unrelated employment, and noise.
+ * Excludes freelancer self-advertisements, unrelated employment, and community noise.
+ * Requires genuine developer/software/web/mobile buyer intent.
  */
 export function isRedditLead(title = '', body = '') {
-  const t = title.toLowerCase();
-  const b = body.toLowerCase();
+  const t = title.toLowerCase().trim();
+  const b = body.toLowerCase().trim();
   const text = `${t} ${b}`;
 
   // 1. Reject moderator, meta, and announcement posts
@@ -381,7 +455,24 @@ export function isRedditLead(title = '', body = '') {
     return false;
   }
 
-  // 2. Reject freelancer self-promotion / sellers
+  // 2. Reject discussion questions & advice threads about hiring
+  if (
+    t.startsWith('question about') ||
+    t.startsWith('questions about') ||
+    t.startsWith('why is hiring') ||
+    t.startsWith('is hiring') ||
+    t.startsWith('how to hire') ||
+    t.startsWith('tips for hiring') ||
+    t.startsWith('how do i') ||
+    t.startsWith('what do you think') ||
+    t.includes('hiring market is') ||
+    t.includes('hiring process at') ||
+    t.includes('my experience hiring')
+  ) {
+    return false;
+  }
+
+  // 3. Reject freelancer self-promotion / sellers
   if (
     t.startsWith('[for hire]') || 
     t.startsWith('[for-hire]') || 
@@ -397,13 +488,17 @@ export function isRedditLead(title = '', body = '') {
     t.includes('seeking remote developer job') ||
     t.includes('seeking junior') ||
     t.includes('seeking sde') ||
+    t.includes('seeking developer role') ||
+    t.includes('seeking developer job') ||
+    t.includes('open to work') ||
+    t.includes('open for work') ||
     t.includes('offering web development') ||
     t.includes('offering my services')
   ) {
     return false;
   }
 
-  // 3. Reject unrelated non-technical jobs
+  // 4. Reject unrelated non-technical jobs
   const unrelatedRoles = [
     'customer service',
     'healthcare support',
@@ -416,9 +511,18 @@ export function isRedditLead(title = '', body = '') {
     'recruiter',
     'data entry',
     'virtual assistant — remote',
+    'virtual assistant (non',
     'video editor',
     'warehouse',
-    'on-camera presenter'
+    'on-camera presenter',
+    'guest experience leader',
+    'cruise line',
+    'boat',
+    'yacht',
+    'real estate & mortgage',
+    'delivery driver',
+    'nurse',
+    'accountant'
   ];
   for (const role of unrelatedRoles) {
     if (t.includes(role)) {
@@ -426,25 +530,34 @@ export function isRedditLead(title = '', body = '') {
     }
   }
 
-  // 4. Explicit hiring tags in gig subreddits
-  if (
+  // 5. Tech / Developer Keyword Indicators
+  const devTechRegex = /\b(developer|dev|programmer|engineer|coder|fullstack|full-stack|frontend|front-end|backend|back-end|software|web|website|web app|mobile app|mobile|app|ios|android|flutter|react native|react|next\.js|nextjs|node\.js|nodejs|typescript|javascript|python|django|fastapi|api|scraping|scraper|bot|automation|firebase|supabase|stripe|mvp|saas|ui\/ux|playwright|puppeteer)\b/i;
+
+  // 6. Explicit hiring tags with software/developer relevance
+  const isExplicitHiringTag = 
     t.includes('[hiring]') || 
     t.includes('[hiring/freelance]') || 
     t.includes('(hiring)') || 
     t.startsWith('hiring:') ||
     t.startsWith('hiring -') ||
-    t.startsWith('hiring ')
-  ) {
-    return true;
+    t.startsWith('hiring ');
+
+  if (isExplicitHiringTag) {
+    // Must be tech/developer related
+    if (devTechRegex.test(t) || devTechRegex.test(b.substring(0, 500))) {
+      return true;
+    }
+    // If [hiring] tag but NO dev words in title or body, ignore non-dev job
+    return false;
   }
 
-  // 5. Intent regex: Looking to hire or contract someone for dev/app/mvp work
-  const hiringIntentRegex = /\b(looking for|need|seeking|hire|hiring|wanted|want to build|looking to build|paying|pay for|budget|contractor|subcontract|agency)\b.{0,80}\b(developer|dev|programmer|engineer|coder|freelancer|contractor|agency|someone|partner|cofounder|co-founder|cto|app|mobile|mvp|website|web app|software|scraper|script|automation|bot|integration)\b/i;
+  // 7. Intent regex: Looking to hire or contract someone for dev/app/mvp work
+  const hiringIntentRegex = /\b(looking for|need|seeking|hire|hiring|wanted|want to build|looking to build|paying|pay for|budget|contractor|subcontract|agency)\b.{0,60}\b(developer|dev|programmer|engineer|coder|freelancer|contractor|partner|cofounder|co-founder|cto|app|mobile|mvp|website|web app|software|scraper|script|automation|bot|integration)\b/i;
   if (hiringIntentRegex.test(t)) {
     return true;
   }
 
-  // 6. Problem-oriented phrases
+  // 8. Problem-oriented developer phrases
   const problemPhrases = [
     'need help building',
     'help finishing our app',
@@ -467,21 +580,14 @@ export function isRedditLead(title = '', body = '') {
     'hourly rate'
   ];
   for (const phrase of problemPhrases) {
-    if (text.includes(phrase)) {
+    if (text.includes(phrase) && devTechRegex.test(text)) {
       return true;
     }
   }
 
-  // 7. General keyword check
-  const matchesKeyword = KEYWORDS.some(kw => t.includes(kw));
-  if (matchesKeyword) {
-    return true;
-  }
-
-  // 8. Tech stack mentioned alongside hiring / project indicators
-  const techRegex = /\b(react native|flutter|next\.js|nextjs|react|node\.js|nodejs|typescript|ios|android|swift|kotlin|mobile app|web app|saas|api|firebase|supabase|stripe|playwright|puppeteer)\b/i;
+  // 9. Tech stack mentioned alongside hiring / contract indicators
   const projectRegex = /\b(contract|project|budget|hourly|freelance|mvp|build|hire|hiring|seeking|needed|help with|paying)\b/i;
-  if ((techRegex.test(t) || techRegex.test(text)) && projectRegex.test(text)) {
+  if (devTechRegex.test(t) && projectRegex.test(t)) {
     return true;
   }
 

@@ -64,14 +64,8 @@ export const getLeads = (req, res) => {
     } else if (timeframe === '3d') {
       queryStr += ` AND l.created_time >= ?`;
       params.push(nowEpoch - (3 * 86400));
-    } else if (timeframe === '7d') {
-      queryStr += ` AND l.created_time >= ?`;
-      params.push(nowEpoch - (7 * 86400));
-    } else if (timeframe === '14d') {
-      queryStr += ` AND l.created_time >= ?`;
-      params.push(nowEpoch - (14 * 86400));
-    } else if (!timeframe && view !== 'rejected' && view !== 'all') {
-      // Default rolling window for qualified opportunities
+    } else if (timeframe === '7d' || (!timeframe && view !== 'rejected' && view !== 'all')) {
+      // Default 7-day window for qualified opportunities
       queryStr += ` AND l.created_time >= ?`;
       params.push(nowEpoch - (7 * 86400));
     }

@@ -14,6 +14,24 @@ function extractPostsFromDom() {
   const seen = new Set();
   const items = [];
 
+  function parseTime(datetimeStr, relativeText) {
+    if (datetimeStr) {
+      const parsed = Date.parse(datetimeStr);
+      if (!isNaN(parsed)) return Math.floor(parsed / 1000);
+    }
+    if (!relativeText) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const text = relativeText.toLowerCase().trim();
+    const dayMatch = text.match(/(\d+)\s*(?:d|day|days)/);
+    if (dayMatch) return now - (parseInt(dayMatch[1], 10) * 86400);
+    const hourMatch = text.match(/(\d+)\s*(?:h|hr|hour|hours)/);
+    if (hourMatch) return now - (parseInt(hourMatch[1], 10) * 3600);
+    const minMatch = text.match(/(\d+)\s*(?:m|min|minute|minutes)/);
+    if (minMatch) return now - (parseInt(minMatch[1], 10) * 60);
+    if (text.includes('yesterday')) return now - 86400;
+    return null;
+  }
+
   // 1. Shreddit post web components
   const postElements = document.querySelectorAll('shreddit-post');
   postElements.forEach((post) => {
@@ -22,13 +40,15 @@ function extractPostsFromDom() {
     const title = post.getAttribute('post-title') || '';
     const permalink = post.getAttribute('permalink') || '';
     const author = post.getAttribute('author') || 'anonymous';
-    const created = post.getAttribute('created-timestamp') || '';
+    const rawCreated = post.getAttribute('created-timestamp') || post.querySelector('time')?.getAttribute('datetime') || '';
+    const timeText = post.querySelector('time')?.innerText || '';
+    const createdTime = parseTime(rawCreated, timeText);
     const body = post.innerText || '';
 
     if (title && permalink && !seen.has(permalink)) {
       seen.add(permalink);
       if (cleanId) seen.add(cleanId);
-      items.push({ id: cleanId, title, permalink, author, created, body });
+      items.push({ id: cleanId, title, permalink, author, created: rawCreated, createdTime, body });
     }
   });
 
@@ -36,8 +56,25 @@ function extractPostsFromDom() {
   const links = Array.from(document.querySelectorAll('a[href*="/comments/"]'));
   for (const a of links) {
     const href = a.getAttribute('href') || '';
-    const title = a.innerText.trim();
-    if (!href.includes('/comments/') || title.length < 5) continue;
+    let title = a.innerText.trim();
+    
+    // Ignore comment buttons, vote counters, share links, or short UI labels
+    if (
+      !href.includes('/comments/') || 
+      title.length < 15 || 
+      /^\d+\s*comments?$/i.test(title) ||
+      /\bcomments?\b/i.test(title) ||
+      /^share$/i.test(title) ||
+      /^\d+$/i.test(title) ||
+      /^vote$/i.test(title)
+    ) {
+      continue;
+    }
+
+    const heading = a.closest('h1, h2, h3, [slot="title"]') || a.querySelector('h1, h2, h3');
+    if (heading && heading.innerText.trim().length > title.length) {
+      title = heading.innerText.trim();
+    }
 
     const idMatch = href.match(/\/comments\/([a-z0-9]+)/i);
     const cleanId = idMatch ? idMatch[1] : '';
@@ -52,55 +89,14 @@ function extractPostsFromDom() {
     const author = authorEl ? authorEl.innerText.replace(/^u\//, '').trim() : 'anonymous';
     const body = parent ? parent.innerText.replace(/\n+/g, ' ').trim() : '';
     const timeEl = parent?.querySelector('time');
-    const created = timeEl ? (timeEl.getAttribute('datetime') || timeEl.innerText || '') : '';
+    const rawCreated = timeEl ? (timeEl.getAttribute('datetime') || '') : '';
+    const timeText = timeEl ? timeEl.innerText : '';
+    const createdTime = parseTime(rawCreated, timeText);
 
-    items.push({ id: cleanId, title, permalink, author, created, body });
+    items.push({ id: cleanId, title, permalink, author, created: rawCreated, createdTime, body });
   }
 
   return items;
-}
-
-/**
- * Robust timestamp parser supporting ISO, RFC, and relative Reddit formats (e.g. '2 days ago', '18 hr. ago').
- */
-export function parseRedditTimestamp(raw) {
-  if (!raw) return Math.floor(Date.now() / 1000);
-  const str = String(raw).trim();
-  
-  const parsed = Date.parse(str);
-  if (!isNaN(parsed)) {
-    return Math.floor(parsed / 1000);
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  const s = str.toLowerCase();
-
-  const daysMatch = s.match(/(\d+)\s*(?:d|day|days)\b/);
-  if (daysMatch) {
-    return now - (parseInt(daysMatch[1], 10) * 86400);
-  }
-
-  const hoursMatch = s.match(/(\d+)\s*(?:h|hr|hour|hours)\b/);
-  if (hoursMatch) {
-    return now - (parseInt(hoursMatch[1], 10) * 3600);
-  }
-
-  const minsMatch = s.match(/(\d+)\s*(?:m|min|minute|minutes)\b/);
-  if (minsMatch) {
-    return now - (parseInt(minsMatch[1], 10) * 60);
-  }
-
-  if (s.includes('yesterday')) {
-    return now - 86400;
-  }
-
-  if (s.includes('week')) {
-    const weeksMatch = s.match(/(\d+)\s*week/);
-    const count = weeksMatch ? parseInt(weeksMatch[1], 10) : 1;
-    return now - (count * 7 * 86400);
-  }
-
-  return now;
 }
 
 /**
@@ -158,9 +154,99 @@ export async function scrapeReddit(onProgress = null) {
       viewport: { width: 1280, height: 900 }
     });
 
-    for (let i = 0; i < SUBREDDITS.length; i += BATCH_SIZE) {
-      const batch = SUBREDDITS.slice(i, i + BATCH_SIZE);
-      logger.scraper('reddit', `Scanning [${i + 1}-${Math.min(i + BATCH_SIZE, SUBREDDITS.length)}/${SUBREDDITS.length}]: ${batch.map(s => 'r/' + s).join(', ')}`);
+    // -------------------------------------------------------------------------
+    // Phase 1A: Targeted High-Intent Keyword Searches Across All Reddit (Last 7 Days)
+    // Directly extracts buyer posts across all public subreddits without rate limits
+    // -------------------------------------------------------------------------
+    const targetedSearches = [
+      { name: 'Dev & Engineer Hiring', query: 'title:"[Hiring]" (developer OR engineer OR programmer OR coder OR fullstack OR frontend OR backend)' },
+      { name: 'Stack Specific Hiring', query: 'title:"[Hiring]" (flutter OR "react native" OR reactjs OR nextjs OR nodejs OR typescript OR web OR app)' },
+      { name: 'Direct Buyer Phrases', query: '"looking for a developer" OR "need a developer" OR "looking to hire a developer" OR "hire a web developer"' },
+      { name: 'App & MVP Requirements', query: 'title:"[Hiring]" ("mobile app" OR "web app" OR "build an app" OR "build a website" OR mvp OR saas)' },
+      { name: 'Backend, Python & AI', query: 'title:"[Hiring]" (python OR django OR fastapi OR automation OR scraping OR scraper OR bot OR api OR openai)' },
+      { name: 'Freelance & Fixed Price', query: 'title:"[Hiring]" (freelance OR contractor OR "paid project" OR "fixed price" OR "hourly")' },
+      { name: 'Hiring to Build', query: '"looking to hire" (developer OR programmer OR flutter OR react OR "web dev" OR "app dev")' },
+      { name: 'Client Need Dev', query: '"need a programmer" OR "need a coder" OR "hire an app developer" OR "hire a mobile developer"' }
+    ];
+
+    logger.scraper('reddit', `Running ${targetedSearches.length} high-yield targeted searches across all of Reddit...`);
+    if (typeof onProgress === 'function') {
+      onProgress({ phase: 'reddit', message: 'Running targeted searches across all Reddit hiring feeds...', progress: 12 });
+    }
+
+    for (let sIdx = 0; sIdx < targetedSearches.length; sIdx++) {
+      const search = targetedSearches[sIdx];
+      let page;
+      try {
+        page = await context.newPage();
+        const searchUrl = `https://www.reddit.com/search/?q=${encodeURIComponent(search.query)}&sort=new&t=week`;
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+        await page.waitForTimeout(1000);
+        await page.evaluate(() => window.scrollBy(0, 3000));
+        await page.waitForTimeout(600);
+        await page.evaluate(() => window.scrollBy(0, 4000));
+        await page.waitForTimeout(600);
+
+        const searchPosts = await page.evaluate(extractPostsFromDom);
+        await page.close().catch(() => {});
+
+        let searchCount = 0;
+        for (const post of searchPosts) {
+          if (!isRedditLead(post.title, post.body)) continue;
+
+          const leadId = `reddit_${post.id || Buffer.from(post.permalink).toString('base64').substring(0, 16)}`;
+          if (seenLeadIds.has(leadId)) continue;
+          seenLeadIds.add(leadId);
+
+          const analysis = analyzeLead(post.title, post.body);
+          let created_time = post.createdTime || Math.floor(Date.now() / 1000);
+          if (!post.createdTime && post.created) {
+            created_time = Math.floor(Date.parse(post.created) / 1000) || created_time;
+          }
+
+          if (!isFreshWithinDays(created_time, 7)) continue;
+
+          leads.push({
+            id: leadId,
+            title: post.title,
+            description: post.body,
+            url: post.permalink.startsWith('http') ? post.permalink : `https://www.reddit.com${post.permalink}`,
+            author: post.author || 'anonymous',
+            created_time,
+            estimated_budget: analysis.estimatedBudget,
+            technology: analysis.technology,
+            platform: analysis.platform,
+            location: 'Remote',
+            company: 'Reddit Client',
+            source: 'reddit/search',
+            score: analysis.score,
+            ai_summary: analysis.summary,
+            ai_risks: analysis.risks,
+            ai_estimated_hours: analysis.estimatedHours,
+            ai_suggested_tech: analysis.suggestedTech,
+            status: 'New'
+          });
+          searchCount++;
+        }
+        logger.scraper('reddit', `Search "${search.name}": found ${searchCount} candidate buyer leads.`);
+      } catch (err) {
+        if (page) await page.close().catch(() => {});
+      }
+
+      if (typeof onProgress === 'function') {
+        const progress = 12 + Math.floor(((sIdx + 1) / targetedSearches.length) * 18);
+        onProgress({ phase: 'reddit', message: `Targeted search (${sIdx + 1}/${targetedSearches.length}): ${leads.length} leads found...`, progress });
+      }
+    }
+
+    logger.scraper('reddit', `Targeted searches yielded ${leads.length} initial client leads. Now scanning premier gig & startup communities...`);
+
+    // Target the highest-converting hiring & startup communities for rapid, unblocked ingestion
+    const targetCommunities = SUBREDDITS.slice(0, 48);
+
+    for (let i = 0; i < targetCommunities.length; i += BATCH_SIZE) {
+      const batch = targetCommunities.slice(i, i + BATCH_SIZE);
+      logger.scraper('reddit', `Scanning [${i + 1}-${Math.min(i + BATCH_SIZE, targetCommunities.length)}/${targetCommunities.length}]: ${batch.map(s => 'r/' + s).join(', ')}`);
       
       const batchPromises = batch.map(async (subreddit) => {
         let page;
@@ -169,8 +255,12 @@ export async function scrapeReddit(onProgress = null) {
           const url = `https://www.reddit.com/r/${subreddit}/new/`;
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
           await page.waitForFunction(() => document.querySelectorAll('shreddit-post, a[href*="/comments/"], article').length >= 2, { timeout: 3500 }).catch(() => {});
+          
+          // Progressive multi-stage deep scroll to load posts from the last 2-3 days
           await page.evaluate(() => window.scrollBy(0, 2500));
-          await page.waitForTimeout(600);
+          await page.waitForTimeout(400);
+          await page.evaluate(() => window.scrollBy(0, 3500));
+          await page.waitForTimeout(500);
 
           const posts = await page.evaluate(extractPostsFromDom);
           await page.close().catch(() => {});
@@ -194,10 +284,14 @@ export async function scrapeReddit(onProgress = null) {
 
           const analysis = analyzeLead(post.title, post.body);
 
-          const created_time = parseRedditTimestamp(post.created);
+          let created_time = Math.floor(Date.now() / 1000);
+          if (post.createdTime) {
+            created_time = post.createdTime;
+          } else if (post.created) {
+            created_time = Math.floor(Date.parse(post.created) / 1000) || created_time;
+          }
 
-          // Extend freshness window to 14 days so posts from today, 2-3 days ago, and earlier are captured
-          if (!isFreshWithinDays(created_time, 14)) {
+          if (!isFreshWithinDays(created_time, 7)) {
             continue;
           }
 
@@ -229,9 +323,9 @@ export async function scrapeReddit(onProgress = null) {
       }
 
       if (typeof onProgress === 'function') {
-        const scannedCount = Math.min(i + BATCH_SIZE, SUBREDDITS.length);
-        const progress = Math.min(45, 10 + Math.floor((scannedCount / SUBREDDITS.length) * 35));
-        onProgress({ phase: 'reddit', message: `Scanning Reddit: ${scannedCount} of ${SUBREDDITS.length} communities (${leads.length} candidates found)...`, progress });
+        const scannedCount = Math.min(i + BATCH_SIZE, targetCommunities.length);
+        const progress = Math.min(48, 30 + Math.floor((scannedCount / targetCommunities.length) * 18));
+        onProgress({ phase: 'reddit', message: `Scanning Reddit: ${scannedCount} of ${targetCommunities.length} communities (${leads.length} candidates found)...`, progress });
       }
     }
   } catch (err) {
@@ -242,6 +336,6 @@ export async function scrapeReddit(onProgress = null) {
     }
   }
 
-  logger.scraper('reddit', `Completed Reddit scraping across all ${SUBREDDITS.length} groups. Found ${leads.length} potential client opportunities.`);
+  logger.scraper('reddit', `Completed Reddit scraping across targeted feeds & communities. Found ${leads.length} potential client opportunities.`);
   return leads;
 }

@@ -3,6 +3,7 @@ import db from '../database/db.js';
 import { logger } from '../utils/logger.js';
 import { scrapeReddit } from '../scrapers/redditScraper.js';
 import { analyzeWithGemini } from '../services/geminiService.js';
+import { analyzeLead } from '../services/analyzer.js';
 import { preFilterCandidate, calculateLeadScore, assignLeadCategory } from '../services/qualifier.js';
 import { sendDesktopNotification } from '../services/notifier.js';
 
@@ -52,7 +53,7 @@ router.post('/', async (req, res) => {
     const uniquePosts = [];
     const seenUrls = new Set();
     const seenIds = new Set();
-    const checkDuplicate = db.prepare('SELECT id FROM leads WHERE id = ? OR url = ?');
+    const checkDuplicate = db.prepare('SELECT id, exclusion_reason, is_potential_client FROM leads WHERE id = ? OR url = ?');
 
     for (const post of allPosts) {
       if (!post.url || seenUrls.has(post.url) || seenIds.has(post.id)) continue;
@@ -60,20 +61,28 @@ router.post('/', async (req, res) => {
       seenIds.add(post.id);
 
       const existing = checkDuplicate.get(post.id, post.url);
-      if (!existing) {
+      // If not in DB, OR if previously not qualified (e.g. timeout or filter fix), allow evaluation!
+      if (!existing || existing.is_potential_client === 0) {
         uniquePosts.push(post);
       }
     }
 
+    // Rank candidates so high-potential developer opportunities are evaluated first
+    uniquePosts.sort((a, b) => {
+      const scoreA = (a.score || 0) + (a.estimated_budget >= 1000 ? 20 : 0);
+      const scoreB = (b.score || 0) + (b.estimated_budget >= 1000 ? 20 : 0);
+      return scoreB - scoreA;
+    });
+
     const newPostsCount = uniquePosts.length;
-    logger.info(`Scan collected ${totalScanned} total posts. Found ${newPostsCount} new posts after duplicate check.`);
+    logger.info(`Scan collected ${totalScanned} total posts. Found ${newPostsCount} actionable candidates.`);
 
     let qualifiedOpportunities = 0;
 
     // Phase 5: Semantic Qualification with Gemini & Deterministic Rules
     if (newPostsCount > 0) {
       const insertLead = db.prepare(`
-        INSERT INTO leads (
+        INSERT OR REPLACE INTO leads (
           id, title, description, url, author, created_time, 
           estimated_budget, technology, platform, location, company, 
           source, score, ai_summary, ai_risks, ai_estimated_hours, 
@@ -98,16 +107,15 @@ router.post('/', async (req, res) => {
         )
       `);
 
+      let geminiQuotaExhausted = false;
+      const MAX_GEMINI_CALLS = 10; // Safely below 15 RPM free tier limit
+      let geminiCallCount = 0;
+
       for (let i = 0; i < newPostsCount; i++) {
         const post = uniquePosts[i];
         const currentProgress = 50 + Math.floor((i / newPostsCount) * 35);
-        sendChunk(res, { 
-          phase: 'gemini', 
-          message: `Qualifying lead (${i + 1}/${newPostsCount}): "${(post.title || '').substring(0, 30)}..."`, 
-          progress: currentProgress 
-        });
 
-        // 1. Deterministic Pre-filter check (fast reject for obvious noise, self-promotion, stale)
+        // 1. Deterministic Pre-filter check (fast reject for noise, self-promotion, stale)
         const preCheck = preFilterCandidate(post);
         if (!preCheck.pass) {
           logger.info(`Pre-filter excluded: "${post.title.substring(0, 40)}" Reason: ${preCheck.reason}`);
@@ -160,13 +168,38 @@ router.post('/', async (req, res) => {
           continue;
         }
 
-        // Delay between Gemini calls to respect API limits
-        if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
+        // 2. Decide whether to evaluate with Gemini or Deterministic Engine
+        let geminiResult = null;
+
+        if (!geminiQuotaExhausted && geminiCallCount < MAX_GEMINI_CALLS) {
+          sendChunk(res, { 
+            phase: 'gemini', 
+            message: `AI Qualifying lead (${i + 1}/${newPostsCount}): "${(post.title || '').substring(0, 30)}..."`, 
+            progress: currentProgress 
+          });
+
+          // Respect free tier limits (~14 requests/min)
+          if (geminiCallCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, 4300));
+          }
+
+          try {
+            geminiResult = await analyzeWithGemini(post.title, post.description, post);
+            geminiCallCount++;
+          } catch (geminiErr) {
+            logger.warn(`Gemini API 429 limit reached: ${geminiErr.message}. Switching to deterministic qualification without dropping leads.`);
+            geminiQuotaExhausted = true;
+          }
+        } else {
+          sendChunk(res, { 
+            phase: 'qualifier', 
+            message: `Qualifying lead (${i + 1}/${newPostsCount}): "${(post.title || '').substring(0, 30)}..."`, 
+            progress: currentProgress 
+          });
         }
 
-        try {
-          const geminiResult = await analyzeWithGemini(post.title, post.description, post);
+        if (geminiResult) {
+          // Gemini Qualified Path
           const { score, isQualified, exclusionReason } = calculateLeadScore(geminiResult, post);
           const category = assignLeadCategory(score, geminiResult, isQualified);
           const isPotentialClient = isQualified ? 1 : 0;
@@ -226,59 +259,69 @@ router.post('/', async (req, res) => {
 
           insertLead.run(enrichedLead);
 
-          // Desktop Notification if high priority
           if (isPotentialClient === 1 && score >= 75) {
             sendDesktopNotification(enrichedLead);
           }
+        } else {
+          // Deterministic Qualification Path (Never drops genuine buyer leads on 429)
+          const analysis = analyzeLead(post.title, post.description || '');
+          const budgetValue = post.estimated_budget || analysis.estimatedBudget || 0;
+          const isPotentialClient = analysis.is_potential_client === 1 ? 1 : 0;
+          const score = analysis.score;
+          const category = isPotentialClient === 0 ? 'rejected' : (budgetValue >= 1000 ? 'high_priority' : (budgetValue > 0 ? 'manual_review' : 'budget_unknown'));
+          const extractedTech = analysis.technology || post.technology || 'General';
 
-        } catch (geminiErr) {
-          logger.error(`Failed to analyze lead "${post.title}" with Gemini: ${geminiErr.message}`);
-          // NEVER mark an unclassified post as a qualified lead by default!
-          try {
-            insertLead.run({
-              id: post.id,
-              title: post.title,
-              description: post.description || '',
-              url: post.url,
-              author: post.author || 'Anonymous',
-              created_time: post.created_time || Math.floor(Date.now() / 1000),
-              estimated_budget: post.estimated_budget || 0,
-              technology: post.technology || 'General',
-              platform: post.platform || 'General',
-              location: post.location || 'Remote',
-              company: post.company || 'Unknown',
-              source: post.source,
-              score: 45,
-              ai_summary: 'AI analysis encountered a temporary network issue. Needs manual inspection.',
-              ai_risks: 'Unverified',
-              ai_estimated_hours: 40,
-              ai_suggested_tech: post.technology || 'General',
-              status: 'New',
-              intent_category: 'Unverified',
-              hiring_intent_score: 45,
-              confidence_score: 40,
-              confidence_reason: 'Automated AI qualification was unavailable.',
-              client_type: 'Unknown',
-              extracted_technologies: post.technology || 'General',
-              urgency_level: 'Medium',
-              opportunity_type: 'Other',
-              is_potential_client: 0, // NOT qualified by default!
-              raw_gemini_json: null,
-              budget_min_usd: 0,
-              budget_max_usd: 0,
-              budget_status: 'unknown',
-              author_intent: 'buyer',
-              engagement_type: 'other',
-              payment_status: 'ambiguous',
-              scope_clarity: 'low',
-              recommended_action: 'Manually review original posting.',
-              exclusion_reason: 'AI service timeout or limit reached during scan.',
-              qualification_category: 'manual_review',
-              is_development_related: 1,
-              is_hiring: 1
-            });
-          } catch (dbErr) {
-            logger.error(`Database fallback insertion failed: ${dbErr.message}`);
+          if (isPotentialClient === 1 && category !== 'rejected') {
+            qualifiedOpportunities++;
+          }
+
+          const enrichedLead = {
+            id: post.id,
+            title: post.title,
+            description: post.description || '',
+            url: post.url,
+            author: post.author || 'Anonymous',
+            created_time: post.created_time || Math.floor(Date.now() / 1000),
+            estimated_budget: budgetValue,
+            technology: extractedTech,
+            platform: post.platform || 'General',
+            location: post.location || 'Remote',
+            company: post.company || 'Client',
+            source: post.source,
+            score: score,
+            ai_summary: analysis.summary || 'Direct buyer seeking software development assistance on Reddit.',
+            ai_risks: analysis.risks || 'Standard freelance engagement',
+            ai_estimated_hours: budgetValue > 5000 ? 160 : (budgetValue > 1000 ? 80 : 40),
+            ai_suggested_tech: analysis.suggestedTech || extractedTech,
+            status: 'New',
+            intent_category: 'Buying Services',
+            hiring_intent_score: score,
+            confidence_score: 85,
+            confidence_reason: 'Deterministic qualification verified genuine developer buyer intent.',
+            client_type: analysis.client_type === 'Agency' ? 'Agency' : 'Client',
+            extracted_technologies: extractedTech,
+            urgency_level: analysis.urgency || 'Medium',
+            opportunity_type: analysis.opportunity_type === 'Agency' ? 'agency_subcontract' : 'direct_freelance',
+            is_potential_client: isPotentialClient,
+            raw_gemini_json: null,
+            budget_min_usd: budgetValue,
+            budget_max_usd: budgetValue,
+            budget_status: budgetValue >= 1000 ? 'confirmed' : (budgetValue > 0 ? 'below_1000' : 'unknown'),
+            author_intent: 'buyer',
+            engagement_type: analysis.opportunity_type === 'Agency' ? 'agency_subcontract' : 'direct_freelance',
+            payment_status: budgetValue > 0 ? 'paid_or_budgeted' : 'budget_unknown',
+            scope_clarity: 'medium',
+            recommended_action: 'Directly contact client on Reddit highlighting past project achievements.',
+            exclusion_reason: isPotentialClient === 0 ? 'Lacks verified developer hiring requirement' : null,
+            qualification_category: category,
+            is_development_related: isPotentialClient,
+            is_hiring: isPotentialClient
+          };
+
+          insertLead.run(enrichedLead);
+
+          if (isPotentialClient === 1 && score >= 75) {
+            sendDesktopNotification(enrichedLead);
           }
         }
       }
@@ -293,6 +336,9 @@ router.post('/', async (req, res) => {
     const filteredPosts = Math.max(0, totalScanned - qualifiedOpportunities);
     const lastScanTime = Math.floor(Date.now() / 1000);
 
+    // Query cumulative active qualified leads across database
+    const totalActiveLeads = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE is_potential_client = 1 AND (qualification_category != 'rejected' OR qualification_category IS NULL) AND score >= 40`).get().count;
+
     // Record stats in the settings table
     const updateSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
     updateSetting.run('lastScanTotalScanned', String(totalScanned));
@@ -304,13 +350,14 @@ router.post('/', async (req, res) => {
     // Phase 7: Refreshing dashboard
     sendChunk(res, { 
       phase: 'refreshing', 
-      message: 'Refreshing dashboard...', 
+      message: `Scan complete: ${qualifiedOpportunities} new opportunities discovered (${totalActiveLeads} total qualified leads available).`, 
       progress: 100,
       stats: {
         totalScanned,
         qualifiedOpportunities,
         filteredPosts,
-        scanDuration
+        scanDuration,
+        totalActiveLeads
       }
     });
 

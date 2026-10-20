@@ -72,10 +72,9 @@ CRITICAL EXCLUSION RULES (HOW TO FILTER OUT NOISE ON REDDIT):
    - Filter out: "Looking for a co-founder (equity only)", "unpaid internship", "work for exposure", "revenue/profit share only when we launch", "0 budget".
    - YOU MUST REJECT THEM: Set payment_status='unpaid_or_equity', budget_status='unpaid', exclusion_reason='Unpaid or equity-only engagement without guaranteed compensation.'
 
-5. FILTER OUT TRULY STALE (>14 DAYS) OR UNVERIFIABLE POSTS:
-   - Posts published today, 1-3 days ago, or within the last 14 days ARE FULLY VALID and active for pitching. DO NOT reject posts because they were posted 2-3 days ago.
-   - Only reject if published more than 14 days ago, or if the post body is "[deleted]", "[removed]", or lacks enough detail to contact.
-   - For genuinely stale (>14d) or removed posts: Set freshness_valid=false, exclusion_reason='Stale or unverifiable post.'
+5. FILTER OUT STALE OR UNVERIFIABLE POSTS:
+   - If published more than 7 days ago, or if body is "[deleted]", "[removed]", or lacks enough detail to contact.
+   - YOU MUST REJECT THEM: Set freshness_valid=false, exclusion_reason='Stale or unverifiable post.'
 
 ================================================================================
 QUALIFICATION RULES (WHAT COUNTS AS A GENUINE PAID LEAD):

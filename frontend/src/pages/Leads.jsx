@@ -265,9 +265,8 @@ const Leads = () => {
           className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium"
         >
           <option value="24h">Last 24 Hours</option>
-          <option value="3d">Last 3 Days (Recent)</option>
-          <option value="7d">Last 7 Days</option>
-          <option value="14d">Last 14 Days (Extended)</option>
+          <option value="3d">Last 3 Days</option>
+          <option value="7d">Last 7 Days (Target)</option>
           <option value="all">All Time</option>
         </select>
 
@@ -277,19 +276,28 @@ const Leads = () => {
           onChange={(e) => setSourceFilter(e.target.value)}
           className="glass-input text-xs py-1.5 cursor-pointer rounded-xl font-medium text-slate-300"
         >
-          <option value="">All Reddit Groups</option>
+          <option value="">All Reddit Groups (325+)</option>
           <option value="forhire">r/forhire</option>
           <option value="Hiring">r/Hiring</option>
-          <option value="jobbit">r/jobbit</option>
+          <option value="devjobs">r/devjobs</option>
+          <option value="remotejs">r/remotejs</option>
+          <option value="RemoteJobs">r/RemoteJobs</option>
           <option value="freelance_forhire">r/freelance_forhire</option>
+          <option value="freelance">r/freelance</option>
           <option value="AppDevelopers">r/AppDevelopers</option>
           <option value="FlutterDev">r/FlutterDev</option>
           <option value="reactnative">r/reactnative</option>
+          <option value="iOSProgramming">r/iOSProgramming</option>
           <option value="webdev">r/webdev</option>
           <option value="nextjs">r/nextjs</option>
+          <option value="reactjs">r/reactjs</option>
+          <option value="node">r/node</option>
           <option value="SaaS">r/SaaS</option>
           <option value="startups">r/startups</option>
+          <option value="Founders">r/Founders</option>
           <option value="Entrepreneur">r/Entrepreneur</option>
+          <option value="SideProject">r/SideProject</option>
+          <option value="IndieHackers">r/IndieHackers</option>
         </select>
 
         {/* Technology */}
